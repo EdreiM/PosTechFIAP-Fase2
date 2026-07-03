@@ -8,34 +8,32 @@ client = Groq(
     api_key=os.getenv("GROQ_API_KEY")
 )
 
-def gerar_instrucoes_rota(best_solution, city_priorities):
-
-    resumo_rota = ""
-
-    for indice, cidade in enumerate(best_solution[:15], start=1):
-
-        prioridade = city_priorities[cidade]
-
-        resumo_rota += (
-            f"{indice}. Cidade {cidade} "
-            f"(prioridade {prioridade})\n"
-        )
+def gerar_instrucoes_rota(texto_veiculos, prioridade_10, prioridade_9_10):
 
     prompt = f"""
-Você é um especialista em logística hospitalar.
+Você é um coordenador de logística hospitalar.
 
-Com base na rota abaixo:
+Com base nos dados dos veículos abaixo, gere INSTRUÇÕES DE ENTREGA para motoristas e equipe.
 
-{resumo_rota}
+Dados dos veículos:
 
-Gere:
+{texto_veiculos}
 
-1. Instruções para equipe de entrega.
-2. Resumo operacional da rota.
-3. Principais cidades prioritárias.
-4. Recomendações de execução.
+Cidades críticas na operação: {prioridade_10} com prioridade 10, {prioridade_9_10} com prioridade 9 ou 10.
 
-Use linguagem clara e profissional.
+Para CADA veículo, informe:
+- Quantidade de cidades a atender
+- Carga (atual/máxima)
+- Distância (atual/máxima)
+- Status operacional (viável ou com restrição)
+- Orientação prática de execução (1-2 frases)
+
+Regras:
+- Máximo 200 palavras no total.
+- NÃO liste todas as cidades de cada rota.
+- Priorize orientar sobre cidades com prioridade 9 e 10.
+- Linguagem clara para equipe de campo.
+- NÃO reorganize a ordem das cidades.
 """
 
     resposta = client.chat.completions.create(

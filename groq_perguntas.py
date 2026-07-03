@@ -10,33 +10,43 @@ client = Groq(
 
 def responder_pergunta(
     pergunta,
-    texto_rota,
+    texto_veiculos,
+    texto_rota_resumo,
     analise,
-    relatorio
+    relatorio,
+    instrucoes,
 ):
 
     prompt = f"""
 Você é um especialista em logística hospitalar.
 
-Você possui acesso aos dados abaixo.
+=== VEÍCULOS ===
 
-=== ROTA ===
+{texto_veiculos}
 
-{texto_rota}
+=== RESUMO DA ROTA ===
 
-=== ANÁLISE ===
+{texto_rota_resumo}
+
+=== ANÁLISE TÉCNICA ===
 
 {analise}
 
-=== RELATÓRIO ===
+=== RELATÓRIO OPERACIONAL ===
 
 {relatorio}
 
-Responda a pergunta do usuário utilizando apenas os dados fornecidos.
+=== INSTRUÇÕES DE ENTREGA ===
 
-Se a resposta não estiver disponível, diga claramente:
+{instrucoes}
 
-"Essa informação não está disponível nos resultados atuais."
+Responda a pergunta do usuário usando apenas os dados acima.
+
+Regras:
+- Responda de forma CURTA e direta (máximo 5 frases).
+- Só liste a rota completa se o usuário pedir explicitamente.
+- Avalie capacidade e autonomia por veículo, não pelo total.
+- Se a informação não estiver disponível, diga: "Essa informação não está disponível nos resultados atuais."
 
 Pergunta:
 
