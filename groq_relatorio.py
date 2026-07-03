@@ -9,105 +9,57 @@ client = Groq(
 )
 
 def gerar_relatorio_operacional(
-    fitness_inicial,
     fitness_final,
-    fitness_final_prioridade,
-    fitness_target_solution,
-    melhoria_fitness,
     melhoria_distancia,
     diferenca_benchmark,
-    geracao_convergencia,
     prioridade_10,
     prioridade_9_10,
     media_top10,
-    carga_total,
-    capacidade_veiculo,
-    texto_rota,
-    distancia_maxima_veiculo,
-    distancia_total_rota,
-    autonomia_respeitada,
-    saldo_autonomia,
+    texto_veiculos,
+    total_cidades,
+    num_veiculos,
+    distancia_aleatoria,
+    fitness_target_solution,
 ):
 
     prompt = f"""
 Você é um analista logístico hospitalar.
 
-Com base nos dados abaixo, gere um RELATÓRIO OPERACIONAL.
+Gere um RELATÓRIO OPERACIONAL DIÁRIO de fechamento da operação de entregas.
 
-Dados:
+Dados gerais:
 
-Fitness final com prioridades:
-{fitness_final_prioridade}
+Total de cidades: {total_cidades}
+Veículos em operação: {num_veiculos}
+Distância total da operação: {fitness_final:.2f}
+Melhoria da distância vs início: {melhoria_distancia:.2f}%
+Comparativo VRP -> AG: {fitness_final:.2f} | Aleatória: {distancia_aleatoria:.2f} | Ótimo: {fitness_target_solution:.2f}
+Diferença para ótimo VRP: {diferenca_benchmark:.2f}%
+Cidades com prioridade 10: {prioridade_10}
+Cidades com prioridade 9 ou 10: {prioridade_9_10}
+Média das prioridades (10 primeiras posições): {media_top10:.2f}
 
-Solução ótima benchmark:
-{fitness_target_solution}
+Status por veículo (avalie CADA veículo individualmente):
 
-Fitness inicial:
-{fitness_inicial}
+{texto_veiculos}
 
-Fitness final:
-{fitness_final}
+Gere exatamente estas seções:
 
-Melhoria fitness:
-{melhoria_fitness:.2f}%
-
-Melhoria distância:
-{melhoria_distancia:.2f}%
-
-Diferença para benchmark:
-{diferenca_benchmark:.2f}%
-
-Geração de convergência:
-{geracao_convergencia}
-
-Quantidade de cidades prioridade 10:
-{prioridade_10}
-
-Quantidade de cidades prioridade 9 ou 10:
-{prioridade_9_10}
-
-Média das prioridades das 10 primeiras posições:
-{media_top10:.2f}
-
-Carga total calculada:
-{carga_total}
-
-Capacidade máxima do veículo:
-{capacidade_veiculo}
-
-Distância máxima permitida:
-{distancia_maxima_veiculo}
-
-Distância da rota:
-{distancia_total_rota}
-
-Autonomia respeitada:
-{autonomia_respeitada}
-
-Saldo de autonomia:
-{saldo_autonomia}
-
-Rota:
-
-{texto_rota}
-
-Gere:
-
-1. Resumo executivo
+1. Resumo
 2. Eficiência da rota
-3. Avaliação das prioridades
-4. Análise da convergência
-5. Pontos fortes
-6. Pontos de melhoria
-7. Conclusão final
-8. Analise a distribuição das demandas entre as cidades.
-9. Informe a carga total transportada.
-10. Avalie se a capacidade máxima do veículo foi respeitada.
-11. Explique os impactos operacionais caso a capacidade seja excedida.
-Utilize linguagem profissional.
-12. Avalie se a autonomia máxima do veículo foi respeitada.
-13. Informe quanto de autonomia sobrou ou foi excedido.
-14. Explique os impactos operacionais da autonomia encontrada.
+3. Capacidade dos veículos
+4. Autonomia dos veículos
+5. Prioridades atendidas
+6. Recomendações (melhorias no processo para o próximo dia/semana)
+
+Regras:
+- Máximo 300 palavras no total.
+- Avalie capacidade e autonomia POR VEÍCULO, não pelo total da operação.
+- Na seção Recomendações, sugira melhorias práticas (ex.: redistribuir cidades críticas, usar mais veículos, ajustar peso de prioridade).
+- Linguagem operacional e direta.
+- NÃO liste todas as cidades.
+- NÃO repita análise de convergência ou benchmark longo.
+- NÃO use linguagem acadêmica.
 """
 
     resposta = client.chat.completions.create(

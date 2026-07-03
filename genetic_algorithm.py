@@ -19,6 +19,66 @@ default_problems = {
 city_priorities = {}
 city_demands = {}
 
+# Configuração VRP (múltiplos veículos)
+NUM_VEICULOS = 3
+CAPACIDADE_VEICULO = 400
+DISTANCIA_MAXIMA_VEICULO = 9000
+PENALIDADE_CARGA = 100
+PENALIDADE_AUTONOMIA = 50
+PESO_PRIORIDADE = 5
+
+
+def dividir_rota_em_veiculos(
+    path: List[Tuple[float, float]],
+    num_veiculos: int = NUM_VEICULOS,
+) -> List[List[Tuple[float, float]]]:
+    rotas = [[] for _ in range(num_veiculos)]
+
+    for indice, cidade in enumerate(path):
+        rotas[indice % num_veiculos].append(cidade)
+
+    return rotas
+
+
+def calcular_distancia_operacao(
+    path: List[Tuple[float, float]],
+    num_veiculos: int = NUM_VEICULOS,
+) -> float:
+    rotas = dividir_rota_em_veiculos(path, num_veiculos)
+
+    return sum(
+        calculate_distance_only(rota)
+        for rota in rotas
+        if rota
+    )
+
+
+def avaliar_restricoes_veiculos(
+    path: List[Tuple[float, float]],
+    num_veiculos: int = NUM_VEICULOS,
+):
+    rotas = dividir_rota_em_veiculos(path, num_veiculos)
+    resumo = []
+
+    for indice, rota in enumerate(rotas, start=1):
+        carga = sum(city_demands.get(cidade, 0) for cidade in rota)
+        distancia = calculate_distance_only(rota) if rota else 0
+        capacidade_ok = carga <= CAPACIDADE_VEICULO
+        autonomia_ok = distancia <= DISTANCIA_MAXIMA_VEICULO
+
+        resumo.append({
+            "veiculo": indice,
+            "cidades": len(rota),
+            "carga": carga,
+            "distancia": distancia,
+            "capacidade_ok": capacidade_ok,
+            "autonomia_ok": autonomia_ok,
+            "viavel": capacidade_ok and autonomia_ok,
+        })
+
+    return resumo
+
+
 def generate_random_population(cities_location: List[Tuple[float, float]], population_size: int) -> List[List[Tuple[float, float]]]:
     """
     Generate a random population of routes for a given set of cities.
@@ -62,70 +122,40 @@ def calculate_distance_only(path: List[Tuple[float, float]]) -> float:
 
     return distance
 
-def calculate_fitness(path: List[Tuple[float, float]]) -> float:
+def calculate_fitness(
+    path: List[Tuple[float, float]],
+    num_veiculos: int = NUM_VEICULOS,
+) -> float:
 
-    # Distância total da rota
-    distance = 0
+    rotas_veiculos = dividir_rota_em_veiculos(path, num_veiculos)
 
-    # Penalidade por visitar cidades importantes tarde
+    distance = sum(
+        calculate_distance_only(rota)
+        for rota in rotas_veiculos
+        if rota
+    )
+
     priority_penalty = 0
+    for position, city in enumerate(path):
+        prioridade = city_priorities.get(city, 1)
+        priority_penalty += position * prioridade * PESO_PRIORIDADE
 
-    # Penalidade por excesso de carga
     load_penalty = 0
-
-    # Penalidade por exceder autonomia
-   
     autonomy_penalty = 0
 
-    n = len(path)
+    for rota in rotas_veiculos:
+        if not rota:
+            continue
 
-    # Distância da rota
-    for i in range(n):
+        carga = sum(city_demands.get(cidade, 0) for cidade in rota)
+        if carga > CAPACIDADE_VEICULO:
+            load_penalty += (carga - CAPACIDADE_VEICULO) * PENALIDADE_CARGA
 
-        distance += calculate_distance(
-            path[i],
-            path[(i + 1) % n]
-        )
-
-    # Penalidade de prioridade
-    for position, city in enumerate(path):
-
-        prioridade = city_priorities.get(city, 1)
-
-        priority_penalty += (
-            position *
-            prioridade *
-            5
-        )
-
-    # Capacidade máxima do veículo
-    vehicle_capacity = 400
-
-    # Soma todas as demandas
-    total_load = sum(
-        city_demands.get(city, 0)
-        for city in path
-    )
-
-    # Penaliza excesso
-    if total_load > vehicle_capacity:
-
-        excesso = total_load - vehicle_capacity
-
-        load_penalty = excesso * 100
-
-    # Autonomia máxima do veículo
-    max_distance = 9000
-
-    if distance > max_distance:
-
-        excesso_distancia = (
-            distance - max_distance
-        )
-
-        autonomy_penalty = (
-            excesso_distancia * 50
-    )
+        distancia_veiculo = calculate_distance_only(rota)
+        if distancia_veiculo > DISTANCIA_MAXIMA_VEICULO:
+            autonomy_penalty += (
+                distancia_veiculo - DISTANCIA_MAXIMA_VEICULO
+            ) * PENALIDADE_AUTONOMIA
 
     return (
         distance

@@ -17,139 +17,56 @@ def analisar_resultado(
     fitness_target_solution,
     diferenca_benchmark,
     top10_prioridades,
-    texto_rota,
     geracao_convergencia,
     prioridade_10,
     prioridade_9_10,
-    media_top10
+    media_top10,
+    total_cidades,
+    num_veiculos,
+    distancia_aleatoria,
 ):
 
     prompt = f"""
-Analise os resultados abaixo de um Algoritmo Genético aplicado ao Problema do Caixeiro Viajante (TSP).
+Analise tecnicamente os resultados de um Algoritmo Genético aplicado ao VRP hospitalar.
 
-Dados do experimento:
+Dados:
 
 Fitness inicial: {fitness_inicial:.2f}
-Fitness final utilizado pelo algoritmo:
-{fitness_final_prioridade:.2f}
-
-Distância real da rota encontrada:
-{fitness_final:.2f}
-
-Importante:
-
-O algoritmo otimiza o fitness com prioridades.
-A distância real é apresentada apenas para comparação com o benchmark ATT48.
-
-Não trate distância real e fitness como a mesma métrica.
-
+Fitness final (com prioridades e restrições): {fitness_final_prioridade:.2f}
+Distância total da operação ({num_veiculos} veículos): {fitness_final:.2f}
 Melhoria do fitness: {melhoria_fitness:.2f}%
+Melhoria da distância: {melhoria_distancia:.2f}%
+Solução ótima VRP (força bruta): {fitness_target_solution:.2f}
+Diferença para o ótimo: {diferenca_benchmark:.2f}%
+Distância de rota aleatória: {distancia_aleatoria:.2f}
+Geração de convergência: {geracao_convergencia}
+Total de cidades: {total_cidades}
+Veículos disponíveis: {num_veiculos}
 
-Melhoria da distância real: {melhoria_distancia:.2f}%
+Prioridades nas 10 primeiras posições: {top10_prioridades}
+Média das prioridades (top 10): {media_top10:.2f}
+Cidades com prioridade 10: {prioridade_10}
+Cidades com prioridade 9 ou 10: {prioridade_9_10}
 
-Solução ótima do benchmark ATT48:
-{fitness_target_solution:.2f}
+Parâmetros: população 100, gerações 1000, mutação 0.5.
 
-Diferença para a solução ótima:
-{diferenca_benchmark:.2f}%
-Geração de convergência:
-{geracao_convergencia:.2f}
-Ao avaliar a convergência:
+Nota: o AG otimiza VRP com {num_veiculos} veículos, prioridades, capacidade e autonomia por veículo.
 
-- considere a geração de convergência informada
-- explique se a convergência ocorreu cedo ou tarde
-- explique o que isso indica sobre a busca do algoritmo
-Objetivo da estratégia:
+Gere uma análise técnica CURTA com exatamente estas seções:
 
-Cidades com prioridade mais alta devem aparecer o mais cedo possível na rota.
+1. Qualidade da solução
+2. Convergência
+3. Prioridades
+4. Benchmark (compare AG vs rota aleatória vs ótimo VRP)
+5. Conclusão
 
-Escala:
-1 = baixa prioridade
-10 = prioridade crítica
-
-Top 10 prioridades encontradas nas primeiras posições da rota:
-
-{top10_prioridades}
-
-Quantidade de cidades com prioridade 10:
-{prioridade_10}
-
-Quantidade de cidades com prioridade 9 ou 10:
-{prioridade_9_10}
-
-Média das prioridades das 10 primeiras posições:
-{media_top10:.2f}
-
-Rota detalhada encontrada:
-
-Cada item possui:
-
-- ordem
-- nome
-- x
-- y
-- prioridade
-
-{texto_rota}
-
-Considere a estratégia bem sucedida quando:
-
-- mais da metade das 10 primeiras posições possuir prioridade igual ou superior a 8
-
-- prioridades 9 e 10 estiverem concentradas no início da rota
-
-Não exija que todas as primeiras posições sejam prioridades máximas.
-Avalie a distribuição de forma estatística.
-
-Parâmetros do algoritmo:
-
-População: 100
-Gerações: 1000
-Taxa de mutação: 0.5
-Importante:
-
-Não invente cidades.
-Não invente coordenadas.
-Não invente prioridades.
-Utilize exclusivamente os dados fornecidos.
-Caso alguma informação não esteja disponível, informe isso explicitamente.
-Explique em linguagem acadêmica:
-
-1. O que os resultados significam.
-2. Se houve convergência.
-3. Qualidade da solução encontrada.
-4. Comparação com a solução ótima.
-5. Conclusão final.
-6. Avalie se as prioridades mais altas realmente aparecem no início da rota.
-7. Explique se a estratégia baseada em prioridades foi bem sucedida.
-8. Analise a rota completa.
-
-9. Utilize TODAS as cidades presentes em "Rota detalhada encontrada".
-
-Não resuma a rota.
-
-Liste todas as cidades na ordem de visita.
-
-
-Para cada cidade informe:
-
-- ordem
-- nome
-- coordenadas
-- prioridade
-
-10. Gere um plano operacional.
-
-Importante:
-
-NÃO crie uma nova ordem de atendimento.
-
-NÃO reorganize as cidades por prioridade.
-
-Considere que a ordem produzida pelo algoritmo genético já é a ordem oficial da rota.
-
-Explique apenas como a equipe deve executar essa rota.
-11. Gere um plano de entrega detalhado.
+Regras:
+- Máximo 250 palavras no total.
+- Linguagem técnica e direta, sem tom acadêmico.
+- NÃO liste cidades.
+- NÃO gere plano de entrega.
+- NÃO analise a rota completa cidade por cidade.
+- Use apenas os dados fornecidos.
 """
 
     resposta = client.chat.completions.create(

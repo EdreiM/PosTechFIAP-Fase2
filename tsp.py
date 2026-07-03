@@ -8,20 +8,26 @@ from genetic_algorithm import (
     generate_random_population,
     calculate_fitness,
     calculate_distance_only,
+    calcular_distancia_operacao,
+    dividir_rota_em_veiculos,
     sort_population,
     default_problems,
     city_priorities,
-    city_demands
+    city_demands,
+    NUM_VEICULOS,
+    CAPACIDADE_VEICULO,
+    DISTANCIA_MAXIMA_VEICULO,
 )
 from draw_functions import draw_paths, draw_plot, draw_cities
 import sys
 import numpy as np
 import pygame
-from benchmark_att48 import *
 
 from groq_analysis import analisar_resultado
 from groq_relatorio import gerar_relatorio_operacional
 from groq_perguntas import responder_pergunta
+from groq_rotas import gerar_instrucoes_rota
+from dashboard_ui import abrir_dashboard
 
 # Define constant values
 # pygame
@@ -31,7 +37,7 @@ FPS = 30
 PLOT_X_OFFSET = 450
 
 # GA
-N_CITIES = 15
+N_CITIES = 10
 POPULATION_SIZE = 100
 N_GENERATIONS = 1000
 MUTATION_PROBABILITY = 0.5
@@ -41,6 +47,11 @@ WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 RED = (255, 0, 0)
 BLUE = (0, 0, 255)
+CORES_VEICULOS = [
+    (37, 99, 235),
+    (220, 38, 38),
+    (22, 163, 74),
+]
 
 
 # Initialize problem
@@ -49,25 +60,20 @@ BLUE = (0, 0, 255)
 #                     for _ in range(N_CITIES)]
 
 
-# # # Using Deault Problems: 10, 12 or 15
-# WIDTH, HEIGHT = 800, 400
-# cities_locations = default_problems[15]
+# Using Default Problems: 10, 12 or 15
+cities_locations = default_problems[N_CITIES]
 
 
-# Using att48 benchmark
-WIDTH, HEIGHT = 1500, 800
-att_cities_locations = np.array(att_48_cities_locations)
-max_x = max(point[0] for point in att_cities_locations)
-max_y = max(point[1] for point in att_cities_locations)
-scale_x = (WIDTH - PLOT_X_OFFSET - NODE_RADIUS) / max_x
-scale_y = HEIGHT / max_y
-cities_locations = [(int(point[0] * scale_x + PLOT_X_OFFSET),
-                     int(point[1] * scale_y)) for point in att_cities_locations]
-target_solution = [cities_locations[i-1] for i in att_48_cities_order]
-
-
-
-# ----- Using att48 benchmark
+# Using att48 benchmark (48 cidades)
+# WIDTH, HEIGHT = 1500, 800
+# att_cities_locations = np.array(att_48_cities_locations)
+# max_x = max(point[0] for point in att_cities_locations)
+# max_y = max(point[1] for point in att_cities_locations)
+# scale_x = (WIDTH - PLOT_X_OFFSET - NODE_RADIUS) / max_x
+# scale_y = HEIGHT / max_y
+# cities_locations = [(int(point[0] * scale_x + PLOT_X_OFFSET),
+#                      int(point[1] * scale_y)) for point in att_cities_locations]
+# target_solution = [cities_locations[i-1] for i in att_48_cities_order]
 
 
 # Initialize Pygame
@@ -91,14 +97,15 @@ print("-" * 50)
 for indice, (cidade, prioridade) in enumerate(city_priorities.items(), start=1):
     print(f"Cidade {indice}: Prioridade {prioridade}")
 
-# Agora que as prioridades já existem,
-# calculamos a fitness da solução ótima ATT48
-fitness_target_solution = calculate_distance_only(
-    target_solution
-)
+# Solução ótima VRP por força bruta (viável com poucas cidades)
+fitness_target_solution = float("inf")
+for permutacao in itertools.permutations(cities_locations):
+    distancia = calcular_distancia_operacao(list(permutacao))
+    if distancia < fitness_target_solution:
+        fitness_target_solution = distancia
 
-print(f"Solução ótima ATT48: {fitness_target_solution:.2f}")
-print(f"Quantidade de cidades: {len(target_solution)}")  
+print(f"Solução ótima VRP ({NUM_VEICULOS} veículos): {fitness_target_solution:.2f}")
+print(f"Quantidade de cidades: {len(cities_locations)}")  
 # Create Initial Population 
 # TODO:- use some heuristic like Nearest Neighbour our Convex Hull to initialize
 population = generate_random_population(cities_locations, POPULATION_SIZE)
@@ -110,6 +117,7 @@ best_solutions = []
 
 # Guarda a fitness da primeira geração
 fitness_inicial = None
+distancia_inicial = None
 melhor_fitness_global = float("inf")
 
 geracoes_sem_melhora = 0
@@ -156,6 +164,7 @@ while running and generation < N_GENERATIONS:
     # Salva a fitness da primeira geração
     if fitness_inicial is None:
         fitness_inicial = best_fitness
+        distancia_inicial = calcular_distancia_operacao(best_solution)
 
     best_fitness_values.append(best_fitness)
     best_solutions.append(best_solution)
@@ -164,8 +173,14 @@ while running and generation < N_GENERATIONS:
               best_fitness_values, y_label="Fitness - Distance (pxls)")
 
     draw_cities(screen, cities_locations, RED, NODE_RADIUS)
-    draw_paths(screen, best_solution, BLUE, width=3)
-    draw_paths(screen, population[1], rgb_color=(128, 128, 128), width=1)
+    for indice, rota in enumerate(dividir_rota_em_veiculos(best_solution)):
+        if len(rota) >= 2:
+            draw_paths(
+                screen,
+                rota,
+                CORES_VEICULOS[indice % len(CORES_VEICULOS)],
+                width=3,
+            )
 
     if generation % 50 == 0:
 
@@ -218,62 +233,78 @@ while running and generation < N_GENERATIONS:
 # Fitness usado pelo AG (distância + prioridade)
 fitness_final_prioridade = best_fitness_values[-1]
 
-# Distância real da rota
-fitness_final = calculate_distance_only(
-    best_solution
-)
+# Distância real da operação (soma das rotas dos veículos)
+fitness_final = calcular_distancia_operacao(best_solution)
 
 # ==========================
 # DIVISÃO EM VEÍCULOS
 # ==========================
 
-NUM_VEICULOS = 3
-
-rotas_veiculos = [
-    [] for _ in range(NUM_VEICULOS)
-]
+rotas_veiculos = dividir_rota_em_veiculos(best_solution)
+ordens_veiculos = [[] for _ in range(NUM_VEICULOS)]
 
 for indice, cidade in enumerate(best_solution):
+    ordens_veiculos[indice % NUM_VEICULOS].append(indice + 1)
 
-    veiculo = indice % NUM_VEICULOS
-
-    rotas_veiculos[veiculo].append(cidade)
+dados_veiculos = []
+texto_veiculos = ""
 
 print("\nROTAS DOS VEÍCULOS")
 print("=" * 50)
 
 for indice, rota in enumerate(rotas_veiculos, start=1):
 
-    carga = sum(
-        city_demands[cidade]
-        for cidade in rota
+    carga = sum(city_demands[cidade] for cidade in rota)
+    distancia = calculate_distance_only(rota) if rota else 0
+    capacidade_ok = carga <= CAPACIDADE_VEICULO
+    autonomia_ok = distancia <= DISTANCIA_MAXIMA_VEICULO
+    status = (
+        "operacionalmente viável"
+        if capacidade_ok and autonomia_ok
+        else "com restrição"
     )
 
-    distancia = calculate_distance_only(rota)
+    ordens = ordens_veiculos[indice - 1]
+    amostra_ordens = ordens[:5]
+    resumo_ordens = ", ".join(
+        f"{o}(p{city_priorities[best_solution[o - 1]]})"
+        for o in amostra_ordens
+    )
+    if len(ordens) > 5:
+        resumo_ordens += f", ... (+{len(ordens) - 5})"
+
+    dados_veiculos.append({
+        "veiculo": indice,
+        "cidades": len(rota),
+        "carga": carga,
+        "distancia": distancia,
+        "capacidade_ok": capacidade_ok,
+        "autonomia_ok": autonomia_ok,
+        "status": status,
+    })
+
+    linha = (
+        f"Veículo {indice} | {len(rota)} cidades | "
+        f"carga {carga}/{CAPACIDADE_VEICULO} | "
+        f"distância {distancia:.0f}/{DISTANCIA_MAXIMA_VEICULO} | "
+        f"status: {status}\n"
+        f"  Primeiras paradas: {resumo_ordens}\n"
+    )
+    texto_veiculos += linha
 
     print(f"Veículo {indice}")
     print(f"Cidades: {len(rota)}")
-    print(f"Carga: {carga}")
-    print(f"Distância: {distancia:.2f}")
+    print(f"Carga: {carga}/{CAPACIDADE_VEICULO}")
+    print(f"Distância: {distancia:.2f}/{DISTANCIA_MAXIMA_VEICULO}")
+    print(f"Status: {status}")
     print("-" * 50)
 
-
-# Autonomia máxima definida no algoritmo
-distancia_maxima_veiculo = 9000
-
-# Distância total da rota encontrada
 distancia_total_rota = fitness_final
+capacidade_veiculo = CAPACIDADE_VEICULO
+distancia_maxima_veiculo = DISTANCIA_MAXIMA_VEICULO
 
-# Verifica se respeitou a autonomia
-autonomia_respeitada = (
-    distancia_total_rota <= distancia_maxima_veiculo
-)
-
-# Quanto sobrou ou excedeu
-saldo_autonomia = (
-    distancia_maxima_veiculo
-    - distancia_total_rota
-)
+rota_aleatoria = random.sample(cities_locations, len(cities_locations))
+distancia_aleatoria = calcular_distancia_operacao(rota_aleatoria)
 
 # Calcula a melhoria percentual usando a mesma métrica do algoritmo:
 # distância + penalidade de prioridade.
@@ -300,8 +331,8 @@ melhoria_prioridade = (
 ) * 100
 
 melhoria_distancia = (
-    (fitness_inicial - fitness_final)
-    / fitness_inicial
+    (distancia_inicial - fitness_final)
+    / distancia_inicial
 ) * 100
 
 print(
@@ -314,26 +345,26 @@ print(
     f"{melhoria_distancia:.2f}%"
 )
 
-
-print(f"Solução ótima:  {fitness_target_solution:.2f}")
+print(f"Solução ótima VRP:  {fitness_target_solution:.2f}")
 print(f"Diferença para ótimo: {diferenca_benchmark:.2f}%")
+print(f"Distância rota aleatória: {distancia_aleatoria:.2f}")
+print(
+    f"Comparativo VRP -> AG: {fitness_final:.2f} | "
+    f"Aleatória: {distancia_aleatoria:.2f} | "
+    f"Ótimo: {fitness_target_solution:.2f}"
+)
 
-print(f"Autonomia máxima: {distancia_maxima_veiculo:.2f}")
-print(f"Distância da rota: {distancia_total_rota:.2f}")
+print(f"Distância total da operação: {distancia_total_rota:.2f}")
 
-if autonomia_respeitada:
-
-    print(
-        f"Autonomia respeitada. "
-        f"Sobrou {saldo_autonomia:.2f}"
-    )
-
-else:
-
-    print(
-        f"Autonomia excedida em "
-        f"{abs(saldo_autonomia):.2f}"
-    )
+todos_viaveis = all(
+    v["capacidade_ok"] and v["autonomia_ok"]
+    for v in dados_veiculos
+)
+print(
+    "Todos os veículos respeitam capacidade e autonomia."
+    if todos_viaveis
+    else "Há veículo(s) com restrição de capacidade ou autonomia."
+)
 print("\nTOP 10 CIDADES DA ROTA FINAL")
 print("-" * 50)
 
@@ -399,11 +430,8 @@ carga_total = sum(
 
 
 
-# Capacidade máxima do veículo
-capacidade_veiculo = 400
-
-print(f"Carga total da rota: {carga_total}")
-print(f"Capacidade do veículo: {capacidade_veiculo}")
+print(f"Carga total da operação: {carga_total}")
+print(f"Capacidade por veículo: {capacidade_veiculo}")
 
 texto_rota = ""
 
@@ -418,8 +446,24 @@ for item in rota_detalhada:
         f"Demanda={item['demanda']}\n"
     )
 
+top10_resumo = ", ".join(
+    f"pos{i}(p{city_priorities[c]})"
+    for i, c in enumerate(best_solution[:10], start=1)
+)
+texto_rota_resumo = (
+    f"Total: {len(rota_detalhada)} cidades | "
+    f"Distância total: {distancia_total_rota:.0f} | "
+    f"Carga total: {carga_total} | "
+    f"Veículos: {NUM_VEICULOS}\n"
+    f"Top 10 posições: {top10_resumo}\n"
+    f"Prioridade 10: {prioridade_10} cidades | "
+    f"Prioridade 9-10: {prioridade_9_10} cidades"
+)
+
 if geracao_convergencia is None:
     geracao_convergencia = generation
+
+print("\nGerando análise, relatório e instruções com IA...")
 
 analise = analisar_resultado(
     fitness_inicial,
@@ -430,71 +474,37 @@ analise = analisar_resultado(
     fitness_target_solution,
     diferenca_benchmark,
     top10_prioridades,
-    texto_rota,
-    geracao_convergencia,
-    prioridade_10,
-    prioridade_9_10,
-    media_top10
-)
-
-print("\n" + "=" * 60)
-print("ANÁLISE DA IA")
-print("=" * 60)
-
-print(analise)
-
-relatorio = gerar_relatorio_operacional(
-    fitness_inicial,
-    fitness_final,
-    fitness_final_prioridade,
-    fitness_target_solution,
-    melhoria_prioridade,
-    melhoria_distancia,
-    diferenca_benchmark,
     geracao_convergencia,
     prioridade_10,
     prioridade_9_10,
     media_top10,
-    carga_total,
-    capacidade_veiculo,
-    texto_rota,
-    distancia_maxima_veiculo,
-    distancia_total_rota,
-    autonomia_respeitada,
-    saldo_autonomia
+    len(rota_detalhada),
+    NUM_VEICULOS,
+    distancia_aleatoria,
 )
 
-print("\n" + "=" * 60)
-print("RELATÓRIO OPERACIONAL")
-print("=" * 60)
+relatorio = gerar_relatorio_operacional(
+    fitness_final,
+    melhoria_distancia,
+    diferenca_benchmark,
+    prioridade_10,
+    prioridade_9_10,
+    media_top10,
+    texto_veiculos,
+    len(rota_detalhada),
+    NUM_VEICULOS,
+    distancia_aleatoria,
+    fitness_target_solution,
+)
 
-print(relatorio)
+instrucoes = gerar_instrucoes_rota(
+    texto_veiculos,
+    prioridade_10,
+    prioridade_9_10,
+)
 
-print("\n" + "=" * 60)
-print("CONSULTA EM LINGUAGEM NATURAL")
-print("=" * 60)
+print("Conteúdo gerado. Abrindo painel com abas...")
 
-while True:
-
-    pergunta = input(
-        "\nDigite uma pergunta (ou 'sair'): "
-    )
-
-    if pergunta.lower() == "sair":
-        break
-
-    resposta = responder_pergunta(
-        pergunta,
-        texto_rota,
-        analise,
-        relatorio
-    )
-
-    print("\nResposta:")
-    print(resposta)
-
-if geracao_convergencia is None:
-    geracao_convergencia = generation
 # Salva o resultado em arquivo texto
 
 with open("melhor_rota.txt", "w", encoding="utf-8") as arquivo:
@@ -508,7 +518,10 @@ with open("melhor_rota.txt", "w", encoding="utf-8") as arquivo:
     arquivo.write(f"População: {POPULATION_SIZE}\n")
     arquivo.write(f"Gerações: {N_GENERATIONS}\n")
     arquivo.write(f"Taxa de mutação: {MUTATION_PROBABILITY}\n")
-    arquivo.write(f"Cidades: {len(cities_locations)}\n\n")
+    arquivo.write(f"Cidades: {len(cities_locations)}\n")
+    arquivo.write(f"Veículos: {NUM_VEICULOS}\n")
+    arquivo.write(f"Capacidade por veículo: {CAPACIDADE_VEICULO}\n")
+    arquivo.write(f"Autonomia por veículo: {DISTANCIA_MAXIMA_VEICULO}\n\n")
 
     arquivo.write(
         f"Geração de convergência: {geracao_convergencia}\n\n"
@@ -540,7 +553,13 @@ with open("melhor_rota.txt", "w", encoding="utf-8") as arquivo:
     )
 
     arquivo.write(
-        f"Diferença para ótimo: {diferenca_benchmark:.2f}%\n\n"
+        f"Diferença para ótimo VRP: {diferenca_benchmark:.2f}%\n\n"
+    )
+
+    arquivo.write(
+        f"Comparativo VRP -> AG: {fitness_final:.2f} | "
+        f"Aleatória: {distancia_aleatoria:.2f} | "
+        f"Ótimo: {fitness_target_solution:.2f}\n\n"
     )
 
 
@@ -570,6 +589,18 @@ with open("melhor_rota.txt", "w", encoding="utf-8") as arquivo:
 
     arquivo.write("\n\n")
     arquivo.write("=" * 50 + "\n")
+    arquivo.write("INSTRUÇÕES DE ENTREGA\n")
+    arquivo.write("=" * 50 + "\n\n")
+    arquivo.write(instrucoes)
+
+    arquivo.write("\n\n")
+    arquivo.write("=" * 50 + "\n")
+    arquivo.write("STATUS DOS VEÍCULOS\n")
+    arquivo.write("=" * 50 + "\n\n")
+    arquivo.write(texto_veiculos)
+
+    arquivo.write("\n\n")
+    arquivo.write("=" * 50 + "\n")
     arquivo.write("ROTA DETALHADA\n")
     arquivo.write("=" * 50 + "\n\n")
 
@@ -584,6 +615,32 @@ with open("melhor_rota.txt", "w", encoding="utf-8") as arquivo:
         )
 
 
-# exit software
+def _responder_pergunta_chat(pergunta):
+    return responder_pergunta(
+        pergunta,
+        texto_veiculos,
+        texto_rota_resumo,
+        analise,
+        relatorio,
+        instrucoes,
+    )
+
+
 pygame.quit()
+
+abrir_dashboard(
+    best_solution=best_solution,
+    cities_locations=cities_locations,
+    city_priorities=city_priorities,
+    analise=analise,
+    relatorio=relatorio,
+    instrucoes=instrucoes,
+    texto_veiculos=texto_veiculos,
+    texto_rota_resumo=texto_rota_resumo,
+    best_fitness_values=best_fitness_values,
+    fitness_final=fitness_final,
+    responder_pergunta_fn=_responder_pergunta_chat,
+    rotas_veiculos=rotas_veiculos,
+)
+
 sys.exit()
