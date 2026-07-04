@@ -94,6 +94,7 @@ def abrir_dashboard(
     city_priorities,
     analise,
     relatorio,
+    relatorio_semanal,
     instrucoes,
     texto_veiculos,
     texto_rota_resumo,
@@ -165,7 +166,8 @@ def abrir_dashboard(
 
     _criar_aba_texto(notebook, "Veículos", texto_veiculos)
     _criar_aba_texto(notebook, "Análise", analise)
-    _criar_aba_texto(notebook, "Relatório", relatorio)
+    _criar_aba_texto(notebook, "Relatório Diário", relatorio)
+    _criar_aba_texto(notebook, "Relatório Semanal", relatorio_semanal)
     _criar_aba_texto(notebook, "Instruções", instrucoes)
 
     aba_convergencia = ttk.Frame(notebook)

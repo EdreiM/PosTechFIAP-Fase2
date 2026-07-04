@@ -79,6 +79,27 @@ def avaliar_restricoes_veiculos(
     return resumo
 
 
+def calcular_solucao_otima_vrp(
+    cities_locations: List[Tuple[float, float]],
+    num_veiculos: int = NUM_VEICULOS,
+    limite_cidades: int = 10,
+) -> float:
+    """Força bruta viável apenas com poucas cidades (n <= limite_cidades)."""
+    import itertools
+
+    n = len(cities_locations)
+    if n > limite_cidades:
+        return float("nan")
+
+    melhor = float("inf")
+    for permutacao in itertools.permutations(cities_locations):
+        distancia = calcular_distancia_operacao(list(permutacao), num_veiculos)
+        if distancia < melhor:
+            melhor = distancia
+
+    return melhor
+
+
 def generate_random_population(cities_location: List[Tuple[float, float]], population_size: int) -> List[List[Tuple[float, float]]]:
     """
     Generate a random population of routes for a given set of cities.

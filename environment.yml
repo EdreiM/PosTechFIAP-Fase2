@@ -49,6 +49,9 @@ dependencies:
       - pydeck==0.9.1
       - pygame==2.6.0
       - pygments==2.18.0
+      - groq>=0.9.0
+      - python-dotenv>=1.0.0
+      - pytest>=8.0.0
       - pyparsing==3.1.4
       - python-dateutil==2.9.0.post0
       - pytz==2024.2

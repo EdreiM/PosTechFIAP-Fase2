@@ -10,6 +10,7 @@ from genetic_algorithm import (
     calculate_distance_only,
     calcular_distancia_operacao,
     dividir_rota_em_veiculos,
+    calcular_solucao_otima_vrp,
     sort_population,
     default_problems,
     city_priorities,
@@ -18,13 +19,14 @@ from genetic_algorithm import (
     CAPACIDADE_VEICULO,
     DISTANCIA_MAXIMA_VEICULO,
 )
-from draw_functions import draw_paths, draw_plot, draw_cities
+from draw_functions import draw_paths, create_plot_surface, draw_cities
 import sys
+import math
 import numpy as np
-import pygame
 
 from groq_analysis import analisar_resultado
 from groq_relatorio import gerar_relatorio_operacional
+from groq_relatorio_semanal import gerar_relatorio_semanal
 from groq_perguntas import responder_pergunta
 from groq_rotas import gerar_instrucoes_rota
 from dashboard_ui import abrir_dashboard
@@ -41,6 +43,8 @@ N_CITIES = 10
 POPULATION_SIZE = 100
 N_GENERATIONS = 1000
 MUTATION_PROBABILITY = 0.5
+PLOT_UPDATE_EVERY = 5
+LIMITE_CIDADES_BENCHMARK = 10
 
 # Define colors
 WHITE = (255, 255, 255)
@@ -63,28 +67,6 @@ CORES_VEICULOS = [
 # Using Default Problems: 10, 12 or 15
 cities_locations = default_problems[N_CITIES]
 
-
-# Using att48 benchmark (48 cidades)
-# WIDTH, HEIGHT = 1500, 800
-# att_cities_locations = np.array(att_48_cities_locations)
-# max_x = max(point[0] for point in att_cities_locations)
-# max_y = max(point[1] for point in att_cities_locations)
-# scale_x = (WIDTH - PLOT_X_OFFSET - NODE_RADIUS) / max_x
-# scale_y = HEIGHT / max_y
-# cities_locations = [(int(point[0] * scale_x + PLOT_X_OFFSET),
-#                      int(point[1] * scale_y)) for point in att_cities_locations]
-# target_solution = [cities_locations[i-1] for i in att_48_cities_order]
-
-
-# Initialize Pygame
-pygame.init()
-screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("TSP Solver using Pygame")
-clock = pygame.time.Clock()
-generation_counter = itertools.count(start=1)  # Start the counter at 1
-
-# Gera prioridades para cada cidade do benchmark
-
 random.seed(42)
 
 for city in cities_locations:
@@ -97,18 +79,28 @@ print("-" * 50)
 for indice, (cidade, prioridade) in enumerate(city_priorities.items(), start=1):
     print(f"Cidade {indice}: Prioridade {prioridade}")
 
-# Solução ótima VRP por força bruta (viável com poucas cidades)
-fitness_target_solution = float("inf")
-for permutacao in itertools.permutations(cities_locations):
-    distancia = calcular_distancia_operacao(list(permutacao))
-    if distancia < fitness_target_solution:
-        fitness_target_solution = distancia
+print(f"Quantidade de cidades: {len(cities_locations)}")
 
-print(f"Solução ótima VRP ({NUM_VEICULOS} veículos): {fitness_target_solution:.2f}")
-print(f"Quantidade de cidades: {len(cities_locations)}")  
-# Create Initial Population 
-# TODO:- use some heuristic like Nearest Neighbour our Convex Hull to initialize
 population = generate_random_population(cities_locations, POPULATION_SIZE)
+fitness_target_solution = None
+
+# Initialize Pygame (após preparar dados — janela abre já pronta para simular)
+pygame.init()
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("TSP Logística — Simulação AG")
+clock = pygame.time.Clock()
+generation_counter = itertools.count(start=1)
+plot_surface = create_plot_surface([1], [0], y_label="Fitness (distância + restrições)")
+screen.fill(WHITE)
+screen.blit(plot_surface, (0, 0))
+draw_cities(screen, cities_locations, RED, NODE_RADIUS)
+pygame.display.flip()
+
+# Using att48 benchmark (48 cidades)
+# WIDTH, HEIGHT = 1500, 800
+# att_cities_locations = np.array(att_48_cities_locations)
+# ...
+
 best_fitness_values = []
 best_solutions = []
 
@@ -143,6 +135,9 @@ while running and generation < N_GENERATIONS:
 
     screen.fill(WHITE)
 
+    if plot_surface is not None:
+        screen.blit(plot_surface, (0, 0))
+
     population_fitness = [calculate_fitness(
         individual) for individual in population]
 
@@ -169,9 +164,6 @@ while running and generation < N_GENERATIONS:
     best_fitness_values.append(best_fitness)
     best_solutions.append(best_solution)
 
-    draw_plot(screen, list(range(len(best_fitness_values))),
-              best_fitness_values, y_label="Fitness - Distance (pxls)")
-
     draw_cities(screen, cities_locations, RED, NODE_RADIUS)
     for indice, rota in enumerate(dividir_rota_em_veiculos(best_solution)):
         if len(rota) >= 2:
@@ -181,6 +173,14 @@ while running and generation < N_GENERATIONS:
                 CORES_VEICULOS[indice % len(CORES_VEICULOS)],
                 width=3,
             )
+
+    if generation == 1 or generation % PLOT_UPDATE_EVERY == 0:
+        plot_surface = create_plot_surface(
+            list(range(1, len(best_fitness_values) + 1)),
+            best_fitness_values,
+            y_label="Fitness (distância + restrições)",
+        )
+        screen.blit(plot_surface, (0, 0))
 
     if generation % 50 == 0:
 
@@ -232,6 +232,22 @@ while running and generation < N_GENERATIONS:
 
 # Fitness usado pelo AG (distância + prioridade)
 fitness_final_prioridade = best_fitness_values[-1]
+
+print("Calculando benchmark VRP (força bruta)...")
+fitness_target_solution = calcular_solucao_otima_vrp(
+    cities_locations,
+    NUM_VEICULOS,
+    LIMITE_CIDADES_BENCHMARK,
+)
+if not math.isnan(fitness_target_solution):
+    print(
+        f"Solução ótima VRP ({NUM_VEICULOS} veículos): "
+        f"{fitness_target_solution:.2f}"
+    )
+else:
+    print(
+        f"Benchmark omitido: mais de {LIMITE_CIDADES_BENCHMARK} cidades."
+    )
 
 # Distância real da operação (soma das rotas dos veículos)
 fitness_final = calcular_distancia_operacao(best_solution)
@@ -313,10 +329,13 @@ melhoria_percentual = (
     / fitness_inicial
 ) * 100
 
-diferenca_benchmark = (
-    (fitness_final - fitness_target_solution)
-    / fitness_target_solution
-) * 100
+if math.isnan(fitness_target_solution):
+    diferenca_benchmark = float("nan")
+else:
+    diferenca_benchmark = (
+        (fitness_final - fitness_target_solution)
+        / fitness_target_solution
+    ) * 100
 
 print("\n" + "=" * 60)
 print("RESULTADOS FINAIS")
@@ -345,8 +364,8 @@ print(
     f"{melhoria_distancia:.2f}%"
 )
 
-print(f"Solução ótima VRP:  {fitness_target_solution:.2f}")
-print(f"Diferença para ótimo: {diferenca_benchmark:.2f}%")
+print(f"Solução ótima VRP:  {fitness_target_solution:.2f}" if not math.isnan(fitness_target_solution) else "Solução ótima VRP:  N/A")
+print(f"Diferença para ótimo: {diferenca_benchmark:.2f}%" if not math.isnan(diferenca_benchmark) else "Diferença para ótimo: N/A")
 print(f"Distância rota aleatória: {distancia_aleatoria:.2f}")
 print(
     f"Comparativo VRP -> AG: {fitness_final:.2f} | "
@@ -497,6 +516,39 @@ relatorio = gerar_relatorio_operacional(
     fitness_target_solution,
 )
 
+economia_diaria_km = max(distancia_aleatoria - fitness_final, 0)
+otimo_txt = (
+    f"{fitness_target_solution:.2f}"
+    if not math.isnan(fitness_target_solution)
+    else "N/A"
+)
+texto_resumo_semanal = (
+    f"Período: semana operacional (5 dias úteis simulados)\n"
+    f"Cidades atendidas por dia: {len(rota_detalhada)}\n"
+    f"Entregas totais na semana: {len(rota_detalhada) * 5}\n"
+    f"Veículos na frota: {NUM_VEICULOS}\n"
+    f"Distância média diária: {fitness_final:.2f}\n"
+    f"Distância total semanal estimada: {fitness_final * 5:.2f}\n"
+    f"Carga média diária: {carga_total}\n"
+    f"Carga total semanal estimada: {carga_total * 5}\n"
+    f"Melhoria de distância (AG vs início): {melhoria_distancia:.2f}%\n"
+    f"Melhoria de fitness (AG): {melhoria_prioridade:.2f}%\n"
+    f"Economia diária vs rota aleatória: {economia_diaria_km:.2f}\n"
+    f"Economia semanal estimada vs aleatória: {economia_diaria_km * 5:.2f}\n"
+    f"Geração de convergência do AG: {geracao_convergencia}\n"
+    f"Cidades prioridade 10 (por dia): {prioridade_10}\n"
+    f"Cidades prioridade 9-10 (por dia): {prioridade_9_10}\n"
+    f"Comparativo VRP -> AG: {fitness_final:.2f} | "
+    f"Aleatória: {distancia_aleatoria:.2f} | "
+    f"Ótimo: {otimo_txt}"
+)
+
+relatorio_semanal = gerar_relatorio_semanal(
+    texto_resumo_semanal,
+    texto_veiculos,
+    relatorio,
+)
+
 instrucoes = gerar_instrucoes_rota(
     texto_veiculos,
     prioridade_10,
@@ -583,9 +635,15 @@ with open("melhor_rota.txt", "w", encoding="utf-8") as arquivo:
     arquivo.write(analise)
     arquivo.write("\n\n")
     arquivo.write("=" * 50 + "\n")
-    arquivo.write("RELATÓRIO OPERACIONAL\n")
+    arquivo.write("RELATÓRIO OPERACIONAL DIÁRIO\n")
     arquivo.write("=" * 50 + "\n\n")
     arquivo.write(relatorio)
+
+    arquivo.write("\n\n")
+    arquivo.write("=" * 50 + "\n")
+    arquivo.write("RELATÓRIO OPERACIONAL SEMANAL\n")
+    arquivo.write("=" * 50 + "\n\n")
+    arquivo.write(relatorio_semanal)
 
     arquivo.write("\n\n")
     arquivo.write("=" * 50 + "\n")
@@ -622,6 +680,7 @@ def _responder_pergunta_chat(pergunta):
         texto_rota_resumo,
         analise,
         relatorio,
+        relatorio_semanal,
         instrucoes,
     )
 
@@ -634,6 +693,7 @@ abrir_dashboard(
     city_priorities=city_priorities,
     analise=analise,
     relatorio=relatorio,
+    relatorio_semanal=relatorio_semanal,
     instrucoes=instrucoes,
     texto_veiculos=texto_veiculos,
     texto_rota_resumo=texto_rota_resumo,
