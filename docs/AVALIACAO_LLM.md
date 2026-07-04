@@ -30,17 +30,26 @@ Documento de avaliação manual conforme exigido pelo Tech Challenge Fase 2 (Pro
 | Clareza | Boa — seções fixas, ~250 palavras |
 | Limitação | Não inventa cidades; depende dos números enviados |
 
-### 2. Relatório operacional (`groq_relatorio.py`)
+### 2. Relatório operacional diário (`groq_relatorio.py`)
 
-**Objetivo:** fechamento diário da operação logística.
+**Objetivo:** fechamento do dia (eficiência, veículos, prioridades).
 
 | Aspecto | Avaliação |
 |---------|-----------|
 | Correção | Boa — avalia cada veículo separadamente |
-| Utilidade | Alta — inclui recomendações práticas |
-| Limitação | Qualidade varia se `texto_veiculos` estiver incompleto |
+| Utilidade | Alta — inclui recomendações para o próximo dia |
 
-### 3. Instruções de entrega (`groq_rotas.py`)
+### 3. Relatório operacional semanal (`groq_relatorio_semanal.py`)
+
+**Objetivo:** consolidado da semana (tendências, economia, padrões).
+
+| Aspecto | Avaliação |
+|---------|-----------|
+| Correção | Boa — usa dados agregados (5 dias simulados) |
+| Utilidade | Alta — foco em economia de tempo/recursos e padrões |
+| Diferenciação | Boa — não repete o relatório diário |
+
+### 4. Instruções de entrega (`groq_rotas.py`)
 
 **Objetivo:** orientar motoristas/equipe de campo.
 
@@ -50,7 +59,7 @@ Documento de avaliação manual conforme exigido pelo Tech Challenge Fase 2 (Pro
 | Concisão | Boa — ~200 palavras, sem listar todas as cidades |
 | Limitação | Não substitui ordem oficial da rota do AG |
 
-### 4. Chat (`groq_perguntas.py`)
+### 5. Chat (`groq_perguntas.py`)
 
 **Objetivo:** perguntas em linguagem natural sobre a operação.
 
@@ -67,7 +76,7 @@ Documento de avaliação manual conforme exigido pelo Tech Challenge Fase 2 (Pro
 | Todos os veículos respeitam capacidade e autonomia? | Sim/Não por veículo, com números |
 | Qual veículo tem maior carga? | Identifica veículo e valor X/400 |
 | Quais cidades têm prioridade 10? | Lista posições ou quantidade |
-| A solução ficou melhor que a rota aleatória? | Compara distâncias |
+| A solução ficou melhor que a rota aleatória? | Comparativo diário/semanal |
 | Qual o horário de chegada? | "Essa informação não está disponível..." |
 
 ## Pontos fortes

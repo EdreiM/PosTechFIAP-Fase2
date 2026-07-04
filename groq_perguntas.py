@@ -14,6 +14,7 @@ def responder_pergunta(
     texto_rota_resumo,
     analise,
     relatorio,
+    relatorio_semanal,
     instrucoes,
 ):
 
@@ -32,9 +33,13 @@ Você é um especialista em logística hospitalar.
 
 {analise}
 
-=== RELATÓRIO OPERACIONAL ===
+=== RELATÓRIO OPERACIONAL DIÁRIO ===
 
 {relatorio}
+
+=== RELATÓRIO OPERACIONAL SEMANAL ===
+
+{relatorio_semanal}
 
 === INSTRUÇÕES DE ENTREGA ===
 
@@ -44,6 +49,7 @@ Responda a pergunta do usuário usando apenas os dados acima.
 
 Regras:
 - Responda de forma CURTA e direta (máximo 5 frases).
+- Use o relatório diário para perguntas do dia; use o semanal para tendências da semana.
 - Só liste a rota completa se o usuário pedir explicitamente.
 - Avalie capacidade e autonomia por veículo, não pelo total.
 - Se a informação não estiver disponível, diga: "Essa informação não está disponível nos resultados atuais."

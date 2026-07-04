@@ -9,7 +9,7 @@ Sistema de otimização de rotas para distribuição de medicamentos e insumos h
 1. Otimiza rotas de entrega com Algoritmo Genético
 2. Considera **prioridades**, **capacidade** e **autonomia por veículo**
 3. Simula a evolução em tempo real (Pygame)
-4. Gera **análise**, **relatório diário**, **instruções** e **chat** com IA
+4. Gera **análise**, **relatório diário**, **relatório semanal**, **instruções** e **chat** com IA
 5. Abre painel operacional com abas (mapa, veículos, relatório, chat)
 
 ## Pré-requisitos
@@ -55,6 +55,7 @@ dashboard_ui.py        # Painel com abas e chat
 draw_functions.py      # Desenho Pygame
 groq_analysis.py       # Análise técnica (LLM)
 groq_relatorio.py      # Relatório operacional diário (LLM)
+groq_relatorio_semanal.py  # Relatório operacional semanal (LLM)
 groq_rotas.py          # Instruções de entrega (LLM)
 groq_perguntas.py      # Chat em linguagem natural (LLM)
 tests/                 # Testes automatizados
@@ -93,7 +94,7 @@ Para usar o benchmark ATT48 (48 cidades), descomente o bloco correspondente em `
 |-----------|--------|
 | AG para roteamento com restrições | Implementado |
 | Visualização em mapa | Pygame + painel |
-| LLM: instruções, relatório, melhorias | Implementado |
+| LLM: instruções, relatório diário/semanal, melhorias | Implementado |
 | Chat em linguagem natural | Implementado |
 | Testes automatizados | `tests/` |
 | Documentação e diagrama | `docs/` |

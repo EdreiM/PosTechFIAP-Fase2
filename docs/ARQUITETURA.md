@@ -30,6 +30,7 @@ flowchart TB
     subgraph llm [Integração LLM - Groq]
         Analise[groq_analysis.py]
         Relatorio[groq_relatorio.py]
+        RelatorioSem[groq_relatorio_semanal.py]
         Instrucoes[groq_rotas.py]
         Chat[groq_perguntas.py]
     end
@@ -48,9 +49,11 @@ flowchart TB
     Conv --> Dash
     Conv --> Analise
     Conv --> Relatorio
+    Conv --> RelatorioSem
     Conv --> Instrucoes
     Analise --> Dash
     Relatorio --> Dash
+    RelatorioSem --> Dash
     Instrucoes --> Dash
     Chat --> Dash
     Relatorio --> Arquivo
@@ -92,7 +95,7 @@ flowchart TB
 | Restrições realistas | Fitness VRP |
 | Visualização em mapa | Pygame + aba Mapa |
 | LLM instruções | `groq_rotas.py` |
-| LLM relatórios | `groq_relatorio.py` |
+| LLM instruções + relatório diário/semanal | `groq_rotas.py`, `groq_relatorio.py`, `groq_relatorio_semanal.py` |
 | LLM melhorias | Seção Recomendações |
 | Perguntas naturais | `groq_perguntas.py` + aba Chat |
 | Testes automatizados | `tests/` |
