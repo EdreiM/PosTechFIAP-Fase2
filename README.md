@@ -50,6 +50,7 @@ pytest tests/ -v
 
 ```
 genetic_algorithm.py   # AG, fitness VRP, restrições
+config.py              # Parâmetros centralizados (cidades, AG, VRP)
 tsp.py                 # Simulação principal
 dashboard_ui.py        # Painel com abas e chat
 draw_functions.py      # Desenho Pygame
@@ -64,24 +65,33 @@ docs/                  # Arquitetura e avaliação da LLM
 
 ## Configuração
 
-Em `genetic_algorithm.py`:
+Todos os parâmetros principais ficam em **`config.py`** — edite só esse arquivo:
 
 | Parâmetro | Padrão | Descrição |
 |-----------|--------|-----------|
+| `N_CIDADES` | 10 | Quantidade de cidades |
+| `MODO_CIDADES` | `"fixo"` | `"fixo"` (5/10/12/15) ou `"aleatorio"` |
 | `NUM_VEICULOS` | 3 | Quantidade de veículos |
 | `CAPACIDADE_VEICULO` | 400 | Carga máxima por veículo |
 | `DISTANCIA_MAXIMA_VEICULO` | 9000 | Autonomia por veículo |
-
-Em `tsp.py`:
-
-| Parâmetro | Padrão | Descrição |
-|-----------|--------|-----------|
-| `N_CITIES` | 10 | Cidades (use 10, 12 ou 15) |
 | `POPULATION_SIZE` | 100 | Tamanho da população |
 | `N_GENERATIONS` | 1000 | Gerações máximas |
 | `MUTATION_PROBABILITY` | 0.5 | Taxa de mutação |
+| `SEED` | 42 | Semente para reprodutibilidade |
 
-Para usar o benchmark ATT48 (48 cidades), descomente o bloco correspondente em `tsp.py`.
+Exemplo — trocar para 12 cidades fixas:
+
+```python
+N_CIDADES = 12
+MODO_CIDADES = "fixo"
+```
+
+Exemplo — 8 cidades aleatórias:
+
+```python
+N_CIDADES = 8
+MODO_CIDADES = "aleatorio"
+```
 
 ## Documentação adicional
 
