@@ -3,21 +3,40 @@ from pygame.locals import *
 import random
 import itertools
 from genetic_algorithm import (
-    mutate,
-    order_crossover,
     generate_random_population,
-    calculate_fitness,
+    calculate_fitness_individuo,
     calculate_distance_only,
     calcular_distancia_operacao,
     dividir_rota_em_veiculos,
     calcular_solucao_otima_vrp,
+    gerar_alocacao_aleatoria,
+    crossover_vrp,
+    mutate_individuo,
     sort_population,
-    default_problems,
     city_priorities,
     city_demands,
     NUM_VEICULOS,
     CAPACIDADE_VEICULO,
     DISTANCIA_MAXIMA_VEICULO,
+)
+from config import (
+    N_CIDADES,
+    POPULATION_SIZE,
+    N_GENERATIONS,
+    MUTATION_PROBABILITY,
+    LIMITE_CIDADES_BENCHMARK,
+    LIMITE_SEM_MELHORA,
+    SEED,
+    WIDTH,
+    HEIGHT,
+    NODE_RADIUS,
+    FPS,
+    PLOT_UPDATE_EVERY,
+    PRIORIDADE_MIN,
+    PRIORIDADE_MAX,
+    DEMANDA_MIN,
+    DEMANDA_MAX,
+    obter_cidades,
 )
 from draw_functions import draw_paths, create_plot_surface, draw_cities
 import sys
@@ -31,22 +50,7 @@ from groq_perguntas import responder_pergunta
 from groq_rotas import gerar_instrucoes_rota
 from dashboard_ui import abrir_dashboard
 
-# Define constant values
-# pygame
-WIDTH, HEIGHT = 800, 400
-NODE_RADIUS = 10
-FPS = 30
-PLOT_X_OFFSET = 450
-
-# GA
-N_CITIES = 10
-POPULATION_SIZE = 100
-N_GENERATIONS = 1000
-MUTATION_PROBABILITY = 0.5
-PLOT_UPDATE_EVERY = 5
-LIMITE_CIDADES_BENCHMARK = 10
-
-# Define colors
+# Cores da interface (específicas da simulação Pygame)
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 RED = (255, 0, 0)
@@ -57,21 +61,13 @@ CORES_VEICULOS = [
     (22, 163, 74),
 ]
 
+cities_locations = obter_cidades()
 
-# Initialize problem
-# Using Random cities generation
-# cities_locations = [(random.randint(NODE_RADIUS + PLOT_X_OFFSET, WIDTH - NODE_RADIUS), random.randint(NODE_RADIUS, HEIGHT - NODE_RADIUS))
-#                     for _ in range(N_CITIES)]
-
-
-# Using Default Problems: 10, 12 or 15
-cities_locations = default_problems[N_CITIES]
-
-random.seed(42)
+random.seed(SEED)
 
 for city in cities_locations:
-    city_priorities[city] = random.randint(1, 10)
-    city_demands[city] = random.randint(5, 30)
+    city_priorities[city] = random.randint(PRIORIDADE_MIN, PRIORIDADE_MAX)
+    city_demands[city] = random.randint(DEMANDA_MIN, DEMANDA_MAX)
 
 print("\nPRIORIDADES DAS CIDADES")
 print("-" * 50)
@@ -114,8 +110,6 @@ melhor_fitness_global = float("inf")
 
 geracoes_sem_melhora = 0
 
-LIMITE_SEM_MELHORA = 100
-
 geracao_convergencia = None
 # Main game loop
 
@@ -138,13 +132,15 @@ while running and generation < N_GENERATIONS:
     if plot_surface is not None:
         screen.blit(plot_surface, (0, 0))
 
-    population_fitness = [calculate_fitness(
-        individual) for individual in population]
+    population_fitness = [
+        calculate_fitness_individuo(ind) for ind in population
+    ]
 
     population, population_fitness = sort_population(
-        population,  population_fitness)
+        population, population_fitness)
 
-    best_fitness = calculate_fitness(population[0])
+    best_fitness = population_fitness[0]
+    best_path, best_alocacao = population[0]
 
     if best_fitness < melhor_fitness_global:
 
@@ -154,18 +150,19 @@ while running and generation < N_GENERATIONS:
     else:
         geracoes_sem_melhora += 1
 
-    best_solution = population[0]
-
-    # Salva a fitness da primeira geração
     if fitness_inicial is None:
         fitness_inicial = best_fitness
-        distancia_inicial = calcular_distancia_operacao(best_solution)
+        distancia_inicial = calcular_distancia_operacao(
+            best_path, best_alocacao
+        )
 
     best_fitness_values.append(best_fitness)
-    best_solutions.append(best_solution)
+    best_solutions.append((best_path, best_alocacao))
 
     draw_cities(screen, cities_locations, RED, NODE_RADIUS)
-    for indice, rota in enumerate(dividir_rota_em_veiculos(best_solution)):
+    for indice, rota in enumerate(
+        dividir_rota_em_veiculos(best_path, best_alocacao)
+    ):
         if len(rota) >= 2:
             draw_paths(
                 screen,
@@ -214,10 +211,8 @@ while running and generation < N_GENERATIONS:
         probability = 1 / np.array(population_fitness)
         parent1, parent2 = random.choices(population, weights=probability, k=2)
 
-        # child1 = order_crossover(parent1, parent2)
-        child1 = order_crossover(parent1, parent2)
-
-        child1 = mutate(child1, MUTATION_PROBABILITY)
+        child1 = crossover_vrp(parent1, parent2)
+        child1 = mutate_individuo(child1, MUTATION_PROBABILITY)
 
         new_population.append(child1)
 
@@ -233,6 +228,8 @@ while running and generation < N_GENERATIONS:
 # Fitness usado pelo AG (distância + prioridade)
 fitness_final_prioridade = best_fitness_values[-1]
 
+best_path, best_alocacao = best_solutions[-1]
+
 print("Calculando benchmark VRP (força bruta)...")
 fitness_target_solution = calcular_solucao_otima_vrp(
     cities_locations,
@@ -246,21 +243,17 @@ if not math.isnan(fitness_target_solution):
     )
 else:
     print(
-        f"Benchmark omitido: mais de {LIMITE_CIDADES_BENCHMARK} cidades."
+        f"Benchmark exato omitido: mais de {LIMITE_CIDADES_BENCHMARK} cidades "
+        f"(ordem + alocação)."
     )
 
-# Distância real da operação (soma das rotas dos veículos)
-fitness_final = calcular_distancia_operacao(best_solution)
+fitness_final = calcular_distancia_operacao(best_path, best_alocacao)
 
-# ==========================
-# DIVISÃO EM VEÍCULOS
-# ==========================
-
-rotas_veiculos = dividir_rota_em_veiculos(best_solution)
+rotas_veiculos = dividir_rota_em_veiculos(best_path, best_alocacao)
 ordens_veiculos = [[] for _ in range(NUM_VEICULOS)]
 
-for indice, cidade in enumerate(best_solution):
-    ordens_veiculos[indice % NUM_VEICULOS].append(indice + 1)
+for indice, cidade in enumerate(best_path):
+    ordens_veiculos[best_alocacao[cidade]].append(indice + 1)
 
 dados_veiculos = []
 texto_veiculos = ""
@@ -283,7 +276,7 @@ for indice, rota in enumerate(rotas_veiculos, start=1):
     ordens = ordens_veiculos[indice - 1]
     amostra_ordens = ordens[:5]
     resumo_ordens = ", ".join(
-        f"{o}(p{city_priorities[best_solution[o - 1]]})"
+        f"{o}(p{city_priorities[best_path[o - 1]]})"
         for o in amostra_ordens
     )
     if len(ordens) > 5:
@@ -320,7 +313,10 @@ capacidade_veiculo = CAPACIDADE_VEICULO
 distancia_maxima_veiculo = DISTANCIA_MAXIMA_VEICULO
 
 rota_aleatoria = random.sample(cities_locations, len(cities_locations))
-distancia_aleatoria = calcular_distancia_operacao(rota_aleatoria)
+alocacao_aleatoria = gerar_alocacao_aleatoria(cities_locations)
+distancia_aleatoria = calcular_distancia_operacao(
+    rota_aleatoria, alocacao_aleatoria
+)
 
 # Calcula a melhoria percentual usando a mesma métrica do algoritmo:
 # distância + penalidade de prioridade.
@@ -331,11 +327,13 @@ melhoria_percentual = (
 
 if math.isnan(fitness_target_solution):
     diferenca_benchmark = float("nan")
+    otimo_txt = "N/A"
 else:
     diferenca_benchmark = (
         (fitness_final - fitness_target_solution)
         / fitness_target_solution
     ) * 100
+    otimo_txt = f"{fitness_target_solution:.2f}"
 
 print("\n" + "=" * 60)
 print("RESULTADOS FINAIS")
@@ -370,7 +368,7 @@ print(f"Distância rota aleatória: {distancia_aleatoria:.2f}")
 print(
     f"Comparativo VRP -> AG: {fitness_final:.2f} | "
     f"Aleatória: {distancia_aleatoria:.2f} | "
-    f"Ótimo: {fitness_target_solution:.2f}"
+    f"Ótimo: {otimo_txt}"
 )
 
 print(f"Distância total da operação: {distancia_total_rota:.2f}")
@@ -387,7 +385,7 @@ print(
 print("\nTOP 10 CIDADES DA ROTA FINAL")
 print("-" * 50)
 
-for indice, cidade in enumerate(best_solution[:10], start=1):
+for indice, cidade in enumerate(best_path[:10], start=1):
 
     prioridade = city_priorities[cidade]
 
@@ -398,14 +396,14 @@ for indice, cidade in enumerate(best_solution[:10], start=1):
 
 top10_prioridades = []
 
-for cidade in best_solution[:10]:
+for cidade in best_path[:10]:
     top10_prioridades.append(
         city_priorities[cidade]
     )    
 
 rota_detalhada = []
 
-for indice, cidade in enumerate(best_solution, start=1):
+for indice, cidade in enumerate(best_path, start=1):
 
     prioridade = city_priorities[cidade]
 
@@ -417,7 +415,8 @@ for indice, cidade in enumerate(best_solution, start=1):
         "x": cidade[0],
         "y": cidade[1],
         "prioridade": prioridade,
-        "demanda": city_demands[cidade]
+        "demanda": city_demands[cidade],
+        "veiculo": best_alocacao[cidade] + 1,
     })
 # ==========================
 # ANÁLISE DA IA (GROQ)
@@ -467,7 +466,7 @@ for item in rota_detalhada:
 
 top10_resumo = ", ".join(
     f"pos{i}(p{city_priorities[c]})"
-    for i, c in enumerate(best_solution[:10], start=1)
+    for i, c in enumerate(best_path[:10], start=1)
 )
 texto_rota_resumo = (
     f"Total: {len(rota_detalhada)} cidades | "
@@ -517,11 +516,6 @@ relatorio = gerar_relatorio_operacional(
 )
 
 economia_diaria_km = max(distancia_aleatoria - fitness_final, 0)
-otimo_txt = (
-    f"{fitness_target_solution:.2f}"
-    if not math.isnan(fitness_target_solution)
-    else "N/A"
-)
 texto_resumo_semanal = (
     f"Período: semana operacional (5 dias úteis simulados)\n"
     f"Cidades atendidas por dia: {len(rota_detalhada)}\n"
@@ -601,17 +595,20 @@ with open("melhor_rota.txt", "w", encoding="utf-8") as arquivo:
     )
 
     arquivo.write(
-        f"Solução ótima: {fitness_target_solution:.2f}\n\n"
+        f"Solução ótima: {otimo_txt}\n\n"
     )
 
-    arquivo.write(
-        f"Diferença para ótimo VRP: {diferenca_benchmark:.2f}%\n\n"
-    )
+    if math.isnan(diferenca_benchmark):
+        arquivo.write("Diferença para ótimo VRP: N/A\n\n")
+    else:
+        arquivo.write(
+            f"Diferença para ótimo VRP: {diferenca_benchmark:.2f}%\n\n"
+        )
 
     arquivo.write(
         f"Comparativo VRP -> AG: {fitness_final:.2f} | "
         f"Aleatória: {distancia_aleatoria:.2f} | "
-        f"Ótimo: {fitness_target_solution:.2f}\n\n"
+        f"Ótimo: {otimo_txt}\n\n"
     )
 
 
@@ -619,12 +616,13 @@ with open("melhor_rota.txt", "w", encoding="utf-8") as arquivo:
 
     arquivo.write("Melhor rota encontrada:\n")
 
-    for indice, cidade in enumerate(best_solution, start=1):
+    for indice, cidade in enumerate(best_path, start=1):
 
         prioridade = city_priorities[cidade]
+        veiculo = best_alocacao[cidade] + 1
 
         arquivo.write(
-            f"{indice}. {cidade} | Prioridade: {prioridade}\n"
+            f"{indice}. {cidade} | Veículo: {veiculo} | Prioridade: {prioridade}\n"
         )
 
     arquivo.write("\n\n")
@@ -666,6 +664,7 @@ with open("melhor_rota.txt", "w", encoding="utf-8") as arquivo:
 
         arquivo.write(
             f"Ordem: {item['ordem']} | "
+            f"Veículo: {item['veiculo']} | "
             f"X: {item['x']} | "
             f"Y: {item['y']} | "
             f"Prioridade: {item['prioridade']} | "
@@ -688,7 +687,7 @@ def _responder_pergunta_chat(pergunta):
 pygame.quit()
 
 abrir_dashboard(
-    best_solution=best_solution,
+    best_solution=best_path,
     cities_locations=cities_locations,
     city_priorities=city_priorities,
     analise=analise,
