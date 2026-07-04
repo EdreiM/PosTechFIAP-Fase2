@@ -10,6 +10,7 @@ from genetic_algorithm import (
     calculate_distance_only,
     calcular_distancia_operacao,
     dividir_rota_em_veiculos,
+    calcular_solucao_otima_vrp,
     sort_population,
     default_problems,
     city_priorities,
@@ -20,6 +21,7 @@ from genetic_algorithm import (
 )
 from draw_functions import draw_paths, draw_plot, draw_cities
 import sys
+import math
 import numpy as np
 import pygame
 
@@ -41,6 +43,8 @@ N_CITIES = 10
 POPULATION_SIZE = 100
 N_GENERATIONS = 1000
 MUTATION_PROBABILITY = 0.5
+PLOT_UPDATE_EVERY = 5
+LIMITE_CIDADES_BENCHMARK = 10
 
 # Define colors
 WHITE = (255, 255, 255)
@@ -79,11 +83,26 @@ cities_locations = default_problems[N_CITIES]
 # Initialize Pygame
 pygame.init()
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("TSP Solver using Pygame")
+pygame.display.set_caption("TSP Logística — Simulação AG")
 clock = pygame.time.Clock()
-generation_counter = itertools.count(start=1)  # Start the counter at 1
+generation_counter = itertools.count(start=1)
 
-# Gera prioridades para cada cidade do benchmark
+
+def mostrar_status(mensagem):
+    screen.fill(WHITE)
+    fonte = pygame.font.SysFont("Arial", 18)
+    texto = fonte.render(mensagem, True, BLACK)
+    screen.blit(texto, (20, HEIGHT // 2 - 10))
+    pygame.display.flip()
+    for evento in pygame.event.get():
+        if evento.type == pygame.QUIT:
+            pygame.quit()
+            sys.exit()
+
+
+mostrar_status("Iniciando simulação do algoritmo genético...")
+
+# Gera prioridades para cada cidade
 
 random.seed(42)
 
@@ -97,16 +116,10 @@ print("-" * 50)
 for indice, (cidade, prioridade) in enumerate(city_priorities.items(), start=1):
     print(f"Cidade {indice}: Prioridade {prioridade}")
 
-# Solução ótima VRP por força bruta (viável com poucas cidades)
-fitness_target_solution = float("inf")
-for permutacao in itertools.permutations(cities_locations):
-    distancia = calcular_distancia_operacao(list(permutacao))
-    if distancia < fitness_target_solution:
-        fitness_target_solution = distancia
+# Solução ótima VRP calculada após a simulação (evita travar a janela no início)
+fitness_target_solution = None
 
-print(f"Solução ótima VRP ({NUM_VEICULOS} veículos): {fitness_target_solution:.2f}")
-print(f"Quantidade de cidades: {len(cities_locations)}")  
-# Create Initial Population 
+# Create Initial Population
 # TODO:- use some heuristic like Nearest Neighbour our Convex Hull to initialize
 population = generate_random_population(cities_locations, POPULATION_SIZE)
 best_fitness_values = []
@@ -169,8 +182,13 @@ while running and generation < N_GENERATIONS:
     best_fitness_values.append(best_fitness)
     best_solutions.append(best_solution)
 
-    draw_plot(screen, list(range(len(best_fitness_values))),
-              best_fitness_values, y_label="Fitness - Distance (pxls)")
+    if generation == 1 or generation % PLOT_UPDATE_EVERY == 0:
+        draw_plot(
+            screen,
+            list(range(len(best_fitness_values))),
+            best_fitness_values,
+            y_label="Fitness (distância + restrições)",
+        )
 
     draw_cities(screen, cities_locations, RED, NODE_RADIUS)
     for indice, rota in enumerate(dividir_rota_em_veiculos(best_solution)):
@@ -232,6 +250,22 @@ while running and generation < N_GENERATIONS:
 
 # Fitness usado pelo AG (distância + prioridade)
 fitness_final_prioridade = best_fitness_values[-1]
+
+mostrar_status("Calculando benchmark VRP (força bruta)...")
+fitness_target_solution = calcular_solucao_otima_vrp(
+    cities_locations,
+    NUM_VEICULOS,
+    LIMITE_CIDADES_BENCHMARK,
+)
+if not math.isnan(fitness_target_solution):
+    print(
+        f"Solução ótima VRP ({NUM_VEICULOS} veículos): "
+        f"{fitness_target_solution:.2f}"
+    )
+else:
+    print(
+        f"Benchmark omitido: mais de {LIMITE_CIDADES_BENCHMARK} cidades."
+    )
 
 # Distância real da operação (soma das rotas dos veículos)
 fitness_final = calcular_distancia_operacao(best_solution)
@@ -313,10 +347,13 @@ melhoria_percentual = (
     / fitness_inicial
 ) * 100
 
-diferenca_benchmark = (
-    (fitness_final - fitness_target_solution)
-    / fitness_target_solution
-) * 100
+if math.isnan(fitness_target_solution):
+    diferenca_benchmark = float("nan")
+else:
+    diferenca_benchmark = (
+        (fitness_final - fitness_target_solution)
+        / fitness_target_solution
+    ) * 100
 
 print("\n" + "=" * 60)
 print("RESULTADOS FINAIS")
@@ -345,8 +382,8 @@ print(
     f"{melhoria_distancia:.2f}%"
 )
 
-print(f"Solução ótima VRP:  {fitness_target_solution:.2f}")
-print(f"Diferença para ótimo: {diferenca_benchmark:.2f}%")
+print(f"Solução ótima VRP:  {fitness_target_solution:.2f}" if not math.isnan(fitness_target_solution) else "Solução ótima VRP:  N/A")
+print(f"Diferença para ótimo: {diferenca_benchmark:.2f}%" if not math.isnan(diferenca_benchmark) else "Diferença para ótimo: N/A")
 print(f"Distância rota aleatória: {distancia_aleatoria:.2f}")
 print(
     f"Comparativo VRP -> AG: {fitness_final:.2f} | "

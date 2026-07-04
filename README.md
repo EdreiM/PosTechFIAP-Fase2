@@ -1,70 +1,105 @@
-# TSP Solver using Genetic Algorithm
+# Tech Challenge Fase 2 — Otimização de Rotas Médicas
 
-This repository contains a Python implementation of a Traveling Salesman Problem (TSP) solver using a Genetic Algorithm (GA). The TSP is a classic problem in the field of combinatorial optimization, where the goal is to find the shortest possible route that visits a set of given cities exactly once and returns to the original city.
+Sistema de otimização de rotas para distribuição de medicamentos e insumos hospitalares, usando **Algoritmo Genético (VRP)** e **LLM (Groq)** para relatórios, instruções e chat operacional.
 
-![alt text](image.png)
-![alt text](image-1.png)
-## Prerequisites
+![Simulação Pygame](image.png)
 
-- Download and Install conda environment manager.
-  -  https://www.anaconda.com/download
-- Open the `Anaconda Prompt`
-- create the `fiap_tsp` environment
-  - `conda env create --file environment.yml`
-- activate the environment
-  - `conda activate fiap_tsp`  
+## O que o projeto faz
 
-## How to Run
+1. Otimiza rotas de entrega com Algoritmo Genético
+2. Considera **prioridades**, **capacidade** e **autonomia por veículo**
+3. Simula a evolução em tempo real (Pygame)
+4. Gera **análise**, **relatório diário**, **instruções** e **chat** com IA
+5. Abre painel operacional com abas (mapa, veículos, relatório, chat)
 
-Execute the following command in your terminal to run the program:
+## Pré-requisitos
 
-### Pygame
-```bash
-python tps.py
-```
-> Press the 'q' key to quit the program.
+- [Anaconda](https://www.anaconda.com/download) ou Miniconda
+- Conta Groq com API key ([console.groq.com](https://console.groq.com))
 
-
-
-## Overview
-
-The TSP solver employs a Genetic Algorithm to iteratively evolve a population of candidate solutions towards an optimal or near-optimal solution. The GA operates by mimicking the process of natural selection, where individuals with higher fitness (i.e., shorter route distance) are more likely to survive and produce offspring.
-
-## Files
-
-- **genetic_algorithm.py**: Contains the implementation of the Genetic Algorithm, including functions for generating random populations, calculating fitness, performing crossover and mutation operations, and sorting populations based on fitness.
-- **tsp.py**: Implements the main TSP solver using Pygame for visualization. It initializes the problem, creates the initial population, and iteratively evolves the population while visualizing the best solution found so far.
-- **draw_functions.py**: Provides functions for drawing cities, paths, and plots using Pygame.
-
-## Usage
-
-To run the TSP solver, execute the `tsp.py` script using Python. The solver allows you to choose between different problem instances:
-
-- Randomly generated cities
-- Default predefined problems with 10, 12, or 15 cities
-- `att48` benchmark dataset (uncomment relevant code in `tsp.py`)
-
-You can customize parameters such as population size, number of generations, and mutation probability directly in the `tsp.py` script.
-
-## Dependencies
-
-- Python 3.x
-- Pygame (for visualization)
-
-Ensure Pygame is installed before running the solver. You can install Pygame using pip:
+## Instalação
 
 ```bash
-pip install pygame
+conda env create --file environment.yml
+conda activate fiap_tsp
 ```
 
-## Acknowledgments
+Crie um arquivo `.env` na raiz do projeto:
 
-This TSP solver was developed as a learning project and draws inspiration from various online resources and academic materials on Genetic Algorithms and the Traveling Salesman Problem. Special thanks to the authors of those resources for sharing their knowledge.
+```env
+GROQ_API_KEY=sua_chave_aqui
+```
 
-## License
+## Como executar
 
-This project is licensed under the [MIT License](LICENSE).
+```bash
+python tsp.py
+```
 
----
+- Pressione **Q** ou feche a janela para encerrar a simulação
+- Ao final, o painel com abas abre automaticamente
+- Resultados salvos localmente em `melhor_rota.txt` (não vai para o Git)
 
-Feel free to contribute to this repository by providing enhancements, bug fixes, or additional features. If you encounter any issues or have suggestions for improvements, please open an issue on the repository. Happy solving!
+## Testes automatizados
+
+```bash
+pytest tests/ -v
+```
+
+## Estrutura do projeto
+
+```
+genetic_algorithm.py   # AG, fitness VRP, restrições
+tsp.py                 # Simulação principal
+dashboard_ui.py        # Painel com abas e chat
+draw_functions.py      # Desenho Pygame
+groq_analysis.py       # Análise técnica (LLM)
+groq_relatorio.py      # Relatório operacional diário (LLM)
+groq_rotas.py          # Instruções de entrega (LLM)
+groq_perguntas.py      # Chat em linguagem natural (LLM)
+tests/                 # Testes automatizados
+docs/                  # Arquitetura e avaliação da LLM
+```
+
+## Configuração
+
+Em `genetic_algorithm.py`:
+
+| Parâmetro | Padrão | Descrição |
+|-----------|--------|-----------|
+| `NUM_VEICULOS` | 3 | Quantidade de veículos |
+| `CAPACIDADE_VEICULO` | 400 | Carga máxima por veículo |
+| `DISTANCIA_MAXIMA_VEICULO` | 9000 | Autonomia por veículo |
+
+Em `tsp.py`:
+
+| Parâmetro | Padrão | Descrição |
+|-----------|--------|-----------|
+| `N_CITIES` | 10 | Cidades (use 10, 12 ou 15) |
+| `POPULATION_SIZE` | 100 | Tamanho da população |
+| `N_GENERATIONS` | 1000 | Gerações máximas |
+| `MUTATION_PROBABILITY` | 0.5 | Taxa de mutação |
+
+Para usar o benchmark ATT48 (48 cidades), descomente o bloco correspondente em `tsp.py`.
+
+## Documentação adicional
+
+- [Arquitetura e diagrama](docs/ARQUITETURA.md)
+- [Avaliação da qualidade da LLM](docs/AVALIACAO_LLM.md)
+
+## Relação com o Tech Challenge (PDF Fase 2)
+
+| Requisito | Status |
+|-----------|--------|
+| AG para roteamento com restrições | Implementado |
+| Visualização em mapa | Pygame + painel |
+| LLM: instruções, relatório, melhorias | Implementado |
+| Chat em linguagem natural | Implementado |
+| Testes automatizados | `tests/` |
+| Documentação e diagrama | `docs/` |
+| Relatório técnico (documento) | A entregar pelo grupo |
+| Vídeo demonstração | A gravar pelo grupo |
+
+## Licença
+
+[MIT License](LICENSE)
