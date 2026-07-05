@@ -1,0 +1,6 @@
+nome,tipo,demanda_kits,prioridade,x,y
+UTI Norte,CRITICO,12,10,733,251
+Home Care Zona Sul,CRITICO,8,9,706,87
+Farmácia Central,REGULAR,18,6,546,97
+Ambulatório Leste,REGULAR,15,5,562,49
+Lab. Análises Clínicas,INSUMO,28,2,576,253

@@ -48,12 +48,30 @@ RANDOM_Y_MIN = 10
 RANDOM_Y_MAX = 390
 
 # =============================================================================
+# DEPÓSITO HOSPITALAR — ponto de saída/retorno de todos os veículos
+# =============================================================================
+
+DEPOT: Cidade = (400, 200)
+
+# =============================================================================
+# UNIDADE DE CARGA — documentação operacional
+# =============================================================================
+# Cada ponto de "demanda" representa um kit padrão de medicamentos/insumos
+# (caixa térmica ou kit fechado pela farmácia hospitalar).
+UNIDADE_MEDIDA = "kit de medicamentos"
+UNIDADE_MEDIDA_ABREV = "kits"
+
+# =============================================================================
 # VRP — frota e restrições operacionais
 # =============================================================================
 
 NUM_VEICULOS = 4
 CAPACIDADE_VEICULO = 40
-DISTANCIA_MAXIMA_VEICULO = 900
+DISTANCIA_MAXIMA_VEICULO = 1500
+
+# Opções expostas na janela de configuração (tsp.py)
+OPCOES_CAPACIDADE = [40, 60, 80]
+OPCOES_AUTONOMIA = [1200, 1500, 2000]
 PENALIDADE_CARGA = 100
 PENALIDADE_AUTONOMIA = 50
 PENALIDADE_VEICULO_VAZIO = 5000
@@ -69,7 +87,29 @@ MUTATION_PROBABILITY = 0.5
 LIMITE_SEM_MELHORA = 100
 LIMITE_CIDADES_BENCHMARK = 7
 
-# Demanda e prioridade geradas por cidade (intervalo inclusivo)
+# Configurações para experimentos comparativos do AG (experimentos_ag.py)
+EXPERIMENTOS_AG = [
+    {
+        "nome": "A - Padrão",
+        "population_size": 100,
+        "mutation_probability": 0.5,
+        "n_generations": 1000,
+    },
+    {
+        "nome": "B - Exploração",
+        "population_size": 200,
+        "mutation_probability": 0.7,
+        "n_generations": 500,
+    },
+    {
+        "nome": "C - Refino",
+        "population_size": 50,
+        "mutation_probability": 0.2,
+        "n_generations": 2000,
+    },
+]
+
+# Intervalos legados (modo aleatório usa TIPOS_ENTREGA em dados_hospitalares.py)
 PRIORIDADE_MIN = 1
 PRIORIDADE_MAX = 10
 DEMANDA_MIN = 5
@@ -83,28 +123,41 @@ WIDTH = 800
 HEIGHT = 400
 NODE_RADIUS = 10
 FPS = 30
-PLOT_X_OFFSET = 450
+PLOT_WIDTH = 400
+MAP_X = 400
+MAP_WIDTH = WIDTH - MAP_X
 PLOT_UPDATE_EVERY = 5
 
 
-def obter_cidades() -> List[Cidade]:
-    """Retorna a lista de cidades conforme N_CIDADES e MODO_CIDADES."""
-    if MODO_CIDADES == "aleatorio":
-        random.seed(SEED)
+def obter_cidades(
+    n_cidades: int = None,
+    modo: str = None,
+    seed: int = None,
+) -> List[Cidade]:
+    """Retorna a lista de cidades conforme parâmetros (ou defaults de config)."""
+    n = n_cidades if n_cidades is not None else N_CIDADES
+    m = modo if modo is not None else MODO_CIDADES
+    s = seed if seed is not None else SEED
+
+    if m == "aleatorio":
+        random.seed(s)
         return [
             (
                 random.randint(RANDOM_X_MIN, RANDOM_X_MAX),
                 random.randint(RANDOM_Y_MIN, RANDOM_Y_MAX),
             )
-            for _ in range(N_CIDADES)
+            for _ in range(n)
         ]
 
-    if N_CIDADES not in DEFAULT_PROBLEMS:
+    if n not in DEFAULT_PROBLEMS:
         disponiveis = sorted(DEFAULT_PROBLEMS.keys())
         raise ValueError(
-            f"N_CIDADES={N_CIDADES} inválido no modo 'fixo'. "
+            f"N_CIDADES={n} inválido no modo 'fixo'. "
             f"Opções: {disponiveis}. "
-            f"Ou defina MODO_CIDADES='aleatorio'."
+            f"Ou use modo 'aleatorio'."
         )
 
-    return DEFAULT_PROBLEMS[N_CIDADES].copy()
+    return DEFAULT_PROBLEMS[n].copy()
+
+
+CIDADES_FIXAS_DISPONIVEIS = sorted(DEFAULT_PROBLEMS.keys())

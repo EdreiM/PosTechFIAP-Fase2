@@ -1,29 +1,57 @@
-import os
-from dotenv import load_dotenv
-from groq import Groq
+from typing import Optional, Sequence, Tuple
 
-load_dotenv()
+from groq_contexto import bloco_contexto_para_prompt, formatar_historico_conversa
+from groq_respostas_locais import tentar_resposta_local
+from groq_utils import chamar_llm
 
-client = Groq(
-    api_key=os.getenv("GROQ_API_KEY")
-)
+
+def _fallback_pergunta(pergunta, texto_rotas_detalhado, historico_conversa):
+    historico = formatar_historico_conversa(historico_conversa)
+    return (
+        "A IA Groq está indisponível no momento (limite de tokens ou sem conexão). "
+        "Consulte as abas Veículos, Instruções e o bloco de ordem das entregas.\n\n"
+        f"Pergunta: {pergunta}\n\n"
+        f"Histórico recente:\n{historico}\n\n"
+        f"{texto_rotas_detalhado[:1500]}"
+    )
+
 
 def responder_pergunta(
     pergunta,
     texto_veiculos,
     texto_rota_resumo,
+    texto_rotas_detalhado,
     analise,
     relatorio,
     relatorio_semanal,
     instrucoes,
+    historico_conversa: Optional[Sequence[Tuple[str, str]]] = None,
 ):
+    historico = historico_conversa or []
+
+    resposta_local = tentar_resposta_local(
+        pergunta, texto_veiculos, texto_rotas_detalhado
+    )
+    if resposta_local:
+        return resposta_local
+
+    historico_texto = formatar_historico_conversa(historico)
+    contexto = bloco_contexto_para_prompt()
 
     prompt = f"""
-Você é um especialista em logística hospitalar.
+Você é um especialista em logística hospitalar (VRP com kits de medicamentos).
 
-=== VEÍCULOS ===
+{contexto}
+
+=== DADOS DA EXECUÇÃO ATUAL ===
+
+=== VEÍCULOS (resumo operacional) ===
 
 {texto_veiculos}
+
+=== ORDEM DAS ENTREGAS (primeira/última parada por veículo e ordem global) ===
+
+{texto_rotas_detalhado}
 
 === RESUMO DA ROTA ===
 
@@ -45,29 +73,28 @@ Você é um especialista em logística hospitalar.
 
 {instrucoes}
 
-Responda a pergunta do usuário usando apenas os dados acima.
+=== HISTÓRICO DESTA CONVERSA (perguntas anteriores) ===
 
-Regras:
-- Responda de forma CURTA e direta (máximo 5 frases).
-- Use o relatório diário para perguntas do dia; use o semanal para tendências da semana.
-- Só liste a rota completa se o usuário pedir explicitamente.
-- Avalie capacidade e autonomia por veículo, não pelo total.
-- Se a informação não estiver disponível, diga: "Essa informação não está disponível nos resultados atuais."
+{historico_texto}
 
-Pergunta:
+Responda a pergunta atual usando o CONTEXTO DO SISTEMA, os DADOS DA EXECUÇÃO e o HISTÓRICO acima.
+Mantenha coerência com respostas anteriores quando o usuário usar "ele", "esse veículo", "e a carga?" etc.
+
+Regras do chat:
+- Resposta CURTA (máximo 5 frases), exceto pedido explícito de instruções completas de rota.
+- ORDEM DAS ENTREGAS: use a sequência exata do bloco ORDEM DAS ENTREGAS — não invente ordem.
+- Prioridade clínica = maior número p (9-10 primeiro), NÃO a última parada da rota.
+- Veículo mencionado explicitamente → responda só sobre ele.
+- Nunca diga "ajuste a rota" — a ordem do AG é oficial.
+- Capacidade/autonomia sempre por veículo, usando os números ATUAL/MAX dos dados.
+- Se não houver dado: "Essa informação não está disponível nos resultados atuais."
+
+Pergunta atual:
 
 {pergunta}
 """
 
-    resposta = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ],
-        temperature=0.2
+    return chamar_llm(
+        prompt,
+        lambda: _fallback_pergunta(pergunta, texto_rotas_detalhado, historico),
     )
-
-    return resposta.choices[0].message.content

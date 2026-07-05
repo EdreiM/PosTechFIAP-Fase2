@@ -161,3 +161,10 @@ cython_debug/
 
 # Saída gerada pela execução
 melhor_rota.txt
+results/
+
+# Python / testes
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.env

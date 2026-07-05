@@ -1,12 +1,56 @@
-import os
-from dotenv import load_dotenv
-from groq import Groq
+import math
 
-load_dotenv()
+from groq_utils import chamar_llm
 
-client = Groq(
-    api_key=os.getenv("GROQ_API_KEY")
-)
+
+def _fallback_relatorio(
+    fitness_final,
+    melhoria_distancia,
+    diferenca_benchmark,
+    prioridade_10,
+    prioridade_9_10,
+    media_top10,
+    texto_veiculos,
+    total_cidades,
+    num_veiculos,
+    distancia_aleatoria,
+    fitness_target_solution,
+):
+    diff_otimo = (
+        f"{diferenca_benchmark:.2f}%"
+        if not math.isnan(diferenca_benchmark)
+        else "N/A"
+    )
+    otimo = (
+        f"{fitness_target_solution:.0f} km"
+        if not math.isnan(fitness_target_solution)
+        else "N/A"
+    )
+
+    return f"""1. Resumo
+Operação diária concluída: {total_cidades} entregas com {num_veiculos} veículos.
+Distância total: {fitness_final:.0f} km.
+
+2. Eficiência da rota
+Melhoria de distância vs. início do AG: {melhoria_distancia:.1f}%.
+Comparativo: AG {fitness_final:.0f} km | Aleatória {distancia_aleatoria:.0f} km | Ótimo {otimo}.
+
+3. Capacidade dos veículos
+{texto_veiculos}
+
+4. Autonomia dos veículos
+Ver distância por veículo acima (limite configurado na simulação).
+
+5. Prioridades atendidas
+{prioridade_10} entregas prioridade 10; {prioridade_9_10} com prioridade 9–10.
+Média nas 10 primeiras posições: {media_top10:.1f}.
+Diferença para ótimo VRP: {diff_otimo}.
+
+6. Recomendações
+Manter monitoramento de veículos com status "com restrição".
+Relatório gerado localmente — IA Groq indisponível no momento.
+"""
+
 
 def gerar_relatorio_operacional(
     fitness_final,
@@ -21,6 +65,16 @@ def gerar_relatorio_operacional(
     distancia_aleatoria,
     fitness_target_solution,
 ):
+    otimo_txt = (
+        f"{fitness_target_solution:.2f}"
+        if not math.isnan(fitness_target_solution)
+        else "N/A"
+    )
+    diff_txt = (
+        f"{diferenca_benchmark:.2f}%"
+        if not math.isnan(diferenca_benchmark)
+        else "N/A"
+    )
 
     prompt = f"""
 Você é um analista logístico hospitalar.
@@ -33,8 +87,8 @@ Total de cidades: {total_cidades}
 Veículos em operação: {num_veiculos}
 Distância total da operação: {fitness_final:.2f}
 Melhoria da distância vs início: {melhoria_distancia:.2f}%
-Comparativo VRP -> AG: {fitness_final:.2f} | Aleatória: {distancia_aleatoria:.2f} | Ótimo: {fitness_target_solution:.2f}
-Diferença para ótimo VRP: {diferenca_benchmark:.2f}%
+Comparativo VRP -> AG: {fitness_final:.2f} | Aleatória: {distancia_aleatoria:.2f} | Ótimo: {otimo_txt}
+Diferença para ótimo VRP: {diff_txt}
 Cidades com prioridade 10: {prioridade_10}
 Cidades com prioridade 9 ou 10: {prioridade_9_10}
 Média das prioridades (10 primeiras posições): {media_top10:.2f}
@@ -62,15 +116,19 @@ Regras:
 - NÃO use linguagem acadêmica.
 """
 
-    resposta = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ],
-        temperature=0.2
+    return chamar_llm(
+        prompt,
+        lambda: _fallback_relatorio(
+            fitness_final,
+            melhoria_distancia,
+            diferenca_benchmark,
+            prioridade_10,
+            prioridade_9_10,
+            media_top10,
+            texto_veiculos,
+            total_cidades,
+            num_veiculos,
+            distancia_aleatoria,
+            fitness_target_solution,
+        ),
     )
-
-    return resposta.choices[0].message.content
