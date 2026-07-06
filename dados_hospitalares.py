@@ -469,6 +469,62 @@ def montar_rotas_por_veiculo(
     return "\n".join(linhas)
 
 
+def montar_catalogo_entregas(
+    path: List[Cidade],
+    alocacao: Dict[Cidade, int],
+) -> str:
+    """Lista tabular completa para IA: unidade, tipo, prioridade, kits e veículo."""
+    linhas = [
+        "Catálogo de entregas (tipo = categoria de medicamento/insumo):",
+        f"{'Ordem':<6} {'Unidade':<32} {'Tipo':<8} {'Prior.':>6} {'Kits':>5} {'Veíc.':>5}",
+        "-" * 68,
+    ]
+    for ordem, cidade in enumerate(path, start=1):
+        linhas.append(
+            f"{ordem:<6} {obter_nome(cidade):<32} {obter_tipo(cidade):<8} "
+            f"{ga.city_priorities.get(cidade, 0):>6} "
+            f"{ga.city_demands.get(cidade, 0):>5} "
+            f"{alocacao[cidade] + 1:>5}"
+        )
+    contagem = resumo_tipos(path)
+    linhas.extend([
+        "-" * 68,
+        f"Totais: CRITICO={contagem['CRITICO']} | "
+        f"REGULAR={contagem['REGULAR']} | INSUMO={contagem['INSUMO']}",
+    ])
+    return "\n".join(linhas)
+
+
+def montar_entregas_por_tipo(path: List[Cidade]) -> str:
+    """Agrupa entregas por tipo CRITICO/REGULAR/INSUMO (resposta a 'quais medicamentos')."""
+    grupos: Dict[str, List[str]] = {"CRITICO": [], "REGULAR": [], "INSUMO": []}
+    for cidade in path:
+        tipo = obter_tipo(cidade)
+        nome = obter_nome(cidade)
+        kits = ga.city_demands.get(cidade, 0)
+        prio = ga.city_priorities.get(cidade, 0)
+        grupos[tipo].append(f"{nome} ({kits} kits, p{prio})")
+
+    rotulos = {
+        "CRITICO": "CRITICO — medicamentos críticos / urgência clínica",
+        "REGULAR": "REGULAR — medicamentos de tratamento contínuo",
+        "INSUMO": "INSUMO — materiais e insumos hospitalares",
+    }
+    linhas = [
+        "Entregas do dia por tipo (cada unidade recebe kits da categoria indicada):",
+        "",
+    ]
+    for tipo in ("CRITICO", "REGULAR", "INSUMO"):
+        linhas.append(f"{rotulos[tipo]} ({len(grupos[tipo])} entregas):")
+        if grupos[tipo]:
+            for item in grupos[tipo]:
+                linhas.append(f"  • {item}")
+        else:
+            linhas.append("  (nenhuma)")
+        linhas.append("")
+    return "\n".join(linhas).strip()
+
+
 def montar_ordem_global(
     best_path: List[Cidade],
     best_alocacao: Dict[Cidade, int],
