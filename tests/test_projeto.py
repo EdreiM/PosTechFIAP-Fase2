@@ -38,7 +38,9 @@ from dados_hospitalares import (
     carga_total_dia,
     configurar_cenario,
     formatar_entrega,
+    montar_catalogo_entregas,
     montar_entregas,
+    montar_entregas_por_tipo,
     montar_ordem_global,
     montar_rotas_por_veiculo,
     obter_nome,
@@ -206,6 +208,14 @@ class TestDadosHospitalares:
         assert "UTI Norte" in texto
         assert "CRITICO" in texto
         assert "kits" in texto
+
+    def test_montar_entregas_por_tipo(self):
+        cities = DEFAULT_PROBLEMS[5].copy()
+        configurar_cenario(cities, seed=42, n_cidades=5, modo="fixo")
+        texto = montar_entregas_por_tipo(cities)
+        assert "CRITICO" in texto
+        assert "UTI Norte" in texto
+        assert "INSUMO" in texto
 
     def test_montar_ordem_global(self):
         cities = DEFAULT_PROBLEMS[5].copy()
@@ -524,6 +534,28 @@ Veículo 3 (5 paradas):
         assert "Veículo 3" in resposta
         assert "79/80" in resposta
         assert "Unidade Domiciliar 11" in resposta
+
+    def test_chat_medicamentos_por_tipo(self):
+        from dados_hospitalares import montar_entregas_por_tipo
+        from groq_perguntas import responder_pergunta
+
+        cities = obter_cidades(5, "fixo", 42)
+        configurar_cenario(cities, seed=42, n_cidades=5, modo="fixo")
+        por_tipo = montar_entregas_por_tipo(cities)
+
+        resposta = responder_pergunta(
+            "Quais medicamentos temos entregues?",
+            self.TEXTO_VEICULOS,
+            "Tipos: CRITICO=2 | REGULAR=2 | INSUMO=1",
+            self.TEXTO_ROTAS,
+            "", "", "", "",
+            texto_entregas_por_tipo=por_tipo,
+        )
+        assert "CRITICO" in resposta
+        assert "REGULAR" in resposta
+        assert "INSUMO" in resposta
+        assert "dipirona" not in resposta.lower()
+        assert "UTI Norte" in resposta or "categorias de kits" in resposta
 
 
 # =============================================================================

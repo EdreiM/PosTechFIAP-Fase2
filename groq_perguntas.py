@@ -25,12 +25,17 @@ def responder_pergunta(
     relatorio,
     relatorio_semanal,
     instrucoes,
+    texto_catalogo_entregas="",
+    texto_entregas_por_tipo="",
     historico_conversa: Optional[Sequence[Tuple[str, str]]] = None,
 ):
     historico = historico_conversa or []
 
     resposta_local = tentar_resposta_local(
-        pergunta, texto_veiculos, texto_rotas_detalhado
+        pergunta,
+        texto_veiculos,
+        texto_rotas_detalhado,
+        texto_entregas_por_tipo=texto_entregas_por_tipo,
     )
     if resposta_local:
         return resposta_local
@@ -44,6 +49,14 @@ Você é um especialista em logística hospitalar (VRP com kits de medicamentos)
 {contexto}
 
 === DADOS DA EXECUÇÃO ATUAL ===
+
+=== CATÁLOGO DE ENTREGAS (unidade, tipo, prioridade, kits, veículo) ===
+
+{texto_catalogo_entregas}
+
+=== ENTREGAS POR TIPO DE MEDICAMENTO/INSUMO ===
+
+{texto_entregas_por_tipo}
 
 === VEÍCULOS (resumo operacional) ===
 
@@ -81,12 +94,14 @@ Responda a pergunta atual usando o CONTEXTO DO SISTEMA, os DADOS DA EXECUÇÃO e
 Mantenha coerência com respostas anteriores quando o usuário usar "ele", "esse veículo", "e a carga?" etc.
 
 Regras do chat:
-- Resposta CURTA (máximo 5 frases), exceto pedido explícito de instruções completas de rota.
+- Resposta CURTA (máximo 5 frases), exceto pedido explícito de instruções completas de rota ou lista de medicamentos por tipo.
 - ORDEM DAS ENTREGAS: use a sequência exata do bloco ORDEM DAS ENTREGAS — não invente ordem.
 - Prioridade clínica = maior número p (9-10 primeiro), NÃO a última parada da rota.
 - Veículo mencionado explicitamente → responda só sobre ele.
 - Nunca diga "ajuste a rota" — a ordem do AG é oficial.
 - Capacidade/autonomia sempre por veículo, usando os números ATUAL/MAX dos dados.
+- MEDICAMENTOS / TIPOS: o sistema NÃO possui nomes de fármacos (ex.: dipirona). Use sempre o campo Tipo: CRITICO (medicamentos críticos), REGULAR (rotineiros) ou INSUMO (materiais). Cite unidade + tipo + kits quando listar entregas.
+- Se perguntarem "quais medicamentos" → responda com as categorias CRITICO/REGULAR/INSUMO e liste unidades do bloco ENTREGAS POR TIPO.
 - Se não houver dado: "Essa informação não está disponível nos resultados atuais."
 
 Pergunta atual:

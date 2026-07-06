@@ -22,6 +22,8 @@ Use **apenas** os dados numéricos e textos fornecidos na execução atual; não
 | REGULAR | Entregas rotineiras      | 2–7               |
 | INSUMO  | Materiais / insumos      | 1–3               |
 
+**Importante:** o sistema **não** armazena nomes de fármacos (dipirona, insulina, etc.). Cada entrega tem **tipo** (CRITICO/REGULAR/INSUMO), **prioridade**, **kits** e **unidade hospitalar**. Quando o usuário perguntar "quais medicamentos", responda com essas **categorias** e liste as unidades de cada tipo.
+
 Entregas com **prioridade 9–10** devem ser tratadas com urgência nas orientações.
 
 ---
@@ -56,6 +58,10 @@ Sequência: UnidadeA(p10), UnidadeB(p6), ...
 
 ### Resumo da rota (`texto_rota_resumo`)
 Totais: entregas, distância, carga, veículos, capacidade/autonomia configuradas, tipos CRITICO/REGULAR/INSUMO, top 10 prioridades.
+
+### Catálogo e tipos (`texto_catalogo_entregas`, `texto_entregas_por_tipo`)
+- **Catálogo:** tabela com ordem, unidade, **tipo**, prioridade, kits e veículo.
+- **Por tipo:** entregas agrupadas em CRITICO / REGULAR / INSUMO — use para perguntas sobre "medicamentos" ou categorias.
 
 ---
 

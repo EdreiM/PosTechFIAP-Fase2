@@ -38,7 +38,9 @@ from dados_hospitalares import (
     carga_total_dia,
     configurar_cenario,
     formatar_entrega,
+    montar_catalogo_entregas,
     montar_entregas,
+    montar_entregas_por_tipo,
     montar_ordem_global,
     montar_rotas_por_veiculo,
     obter_nome,
@@ -295,7 +297,8 @@ for indice, rota in enumerate(rotas_veiculos, start=1):
     ordens = ordens_veiculos[indice - 1]
     amostra_ordens = ordens[:5]
     resumo_ordens = ", ".join(
-        f"{obter_nome(best_path[o - 1])}(p{city_priorities[best_path[o - 1]]})"
+        f"{obter_nome(best_path[o - 1])}[{obter_tipo(best_path[o - 1])}]"
+        f"(p{city_priorities[best_path[o - 1]]})"
         for o in amostra_ordens
     )
     if len(ordens) > 5:
@@ -316,8 +319,10 @@ for indice, rota in enumerate(rotas_veiculos, start=1):
         f"carga {carga}/{capacidade_veiculo} | "
         f"distância {distancia:.0f}/{distancia_maxima_veiculo} | "
         f"status: {status}\n"
-        f"  Primeira parada: {obter_nome(rota[0]) if rota else 'N/A'}\n"
-        f"  Última parada: {obter_nome(rota[-1]) if rota else 'N/A'}\n"
+        f"  Primeira parada: "
+        f"{formatar_entrega(rota[0]) if rota else 'N/A'}\n"
+        f"  Última parada: "
+        f"{formatar_entrega(rota[-1]) if rota else 'N/A'}\n"
         f"  Sequência (início): {resumo_ordens}\n"
     )
     texto_veiculos += linha
@@ -478,9 +483,11 @@ for item in rota_detalhada:
     )
 
 top10_resumo = ", ".join(
-    f"{obter_nome(c)}(p{city_priorities[c]})"
+    f"{obter_nome(c)}[{obter_tipo(c)}](p{city_priorities[c]})"
     for i, c in enumerate(best_path[:10], start=1)
 )
+texto_catalogo_entregas = montar_catalogo_entregas(best_path, best_alocacao)
+texto_entregas_por_tipo = montar_entregas_por_tipo(best_path)
 texto_rota_resumo = (
     f"Total: {len(rota_detalhada)} entregas | "
     f"Distância total: {distancia_total_rota:.0f} | "
@@ -711,6 +718,8 @@ def _responder_pergunta_chat(pergunta, historico_conversa=None):
         relatorio,
         relatorio_semanal,
         instrucoes,
+        texto_catalogo_entregas=texto_catalogo_entregas,
+        texto_entregas_por_tipo=texto_entregas_por_tipo,
         historico_conversa=historico_conversa,
     )
 

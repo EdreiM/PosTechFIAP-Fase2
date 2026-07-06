@@ -100,11 +100,52 @@ def gerar_instrucoes_veiculo_local(
     )
 
 
+def pergunta_sobre_medicamentos_ou_tipos(pergunta: str) -> bool:
+    p = pergunta.lower()
+    return any(
+        k in p
+        for k in (
+            "medicamento",
+            "medicamentos",
+            "fármaco",
+            "farmaco",
+            "remédio",
+            "remedio",
+            "insumo",
+            "insumos",
+            "critico",
+            "crítico",
+            "criticos",
+            "críticos",
+            "tipo de entrega",
+            "tipos de entrega",
+            "categoria",
+            "categorias",
+        )
+    )
+
+
+def responder_medicamentos_local(texto_entregas_por_tipo: str) -> Optional[str]:
+    if not texto_entregas_por_tipo.strip():
+        return None
+    return (
+        "O sistema registra categorias de kits (não nomes de fármacos específicos). "
+        "Segue o resumo por tipo:\n\n"
+        f"{texto_entregas_por_tipo}"
+    )
+
+
 def tentar_resposta_local(
     pergunta: str,
     texto_veiculos: str,
     texto_rotas_detalhado: str,
+    texto_entregas_por_tipo: str = "",
 ) -> Optional[str]:
+    if pergunta_sobre_medicamentos_ou_tipos(pergunta):
+        resposta = responder_medicamentos_local(texto_entregas_por_tipo)
+        if resposta:
+            return resposta
+
     num = extrair_numero_veiculo(pergunta)
     if num is None or not pergunta_sobre_rota_ou_instrucoes(pergunta):
         return None
