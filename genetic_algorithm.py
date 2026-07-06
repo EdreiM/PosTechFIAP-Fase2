@@ -7,9 +7,10 @@ import itertools
 from typing import Dict, List, Tuple
 
 from config import (
-    CAPACIDADE_VEICULO,
+    CAPACIDADE_VEICULO as _CAPACIDADE_PADRAO,
     DEFAULT_PROBLEMS,
-    DISTANCIA_MAXIMA_VEICULO,
+    DEPOT,
+    DISTANCIA_MAXIMA_VEICULO as _AUTONOMIA_PADRAO,
     NUM_VEICULOS,
     PENALIDADE_AUTONOMIA,
     PENALIDADE_CARGA,
@@ -19,8 +20,26 @@ from config import (
 
 default_problems = DEFAULT_PROBLEMS
 
+# Atualizável em runtime (janela de configuração do tsp.py)
+CAPACIDADE_VEICULO = _CAPACIDADE_PADRAO
+DISTANCIA_MAXIMA_VEICULO = _AUTONOMIA_PADRAO
+
+
+def aplicar_parametros_frota(
+    capacidade: int = None,
+    autonomia: int = None,
+) -> None:
+    """Define capacidade (kits) e autonomia (km) da frota para esta execução."""
+    global CAPACIDADE_VEICULO, DISTANCIA_MAXIMA_VEICULO
+    if capacidade is not None:
+        CAPACIDADE_VEICULO = capacidade
+    if autonomia is not None:
+        DISTANCIA_MAXIMA_VEICULO = autonomia
+
 city_priorities = {}
 city_demands = {}
+city_names = {}
+city_types = {}
 
 Cidade = Tuple[float, float]
 Alocacao = Dict[Cidade, int]
@@ -51,8 +70,15 @@ def reparar_alocacao(
     path: List[Cidade],
     num_veiculos: int = NUM_VEICULOS,
 ) -> Alocacao:
-    """Garante que todo veículo receba ao menos uma cidade."""
+    """Garante índices válidos e ao menos uma cidade por veículo."""
     alocacao = alocacao.copy()
+
+    for cidade in path:
+        if cidade not in alocacao:
+            alocacao[cidade] = random.randint(0, num_veiculos - 1)
+        elif alocacao[cidade] < 0 or alocacao[cidade] >= num_veiculos:
+            alocacao[cidade] = random.randint(0, num_veiculos - 1)
+
     usados = set(alocacao[c] for c in path)
 
     for veiculo in range(num_veiculos):
@@ -79,6 +105,8 @@ def dividir_rota_em_veiculos(
         for indice, cidade in enumerate(path):
             rotas[indice % num_veiculos].append(cidade)
         return rotas
+
+    alocacao = reparar_alocacao(alocacao, path, num_veiculos)
 
     for cidade in path:
         rotas[alocacao[cidade]].append(cidade)
@@ -185,9 +213,10 @@ def criar_individuo_aleatorio(
 def generate_random_population(
     cities_location: List[Cidade],
     population_size: int,
+    num_veiculos: int = NUM_VEICULOS,
 ) -> List[IndividuoVRP]:
     return [
-        criar_individuo_aleatorio(cities_location)
+        criar_individuo_aleatorio(cities_location, num_veiculos)
         for _ in range(population_size)
     ]
 
@@ -196,13 +225,28 @@ def calculate_distance(point1: Cidade, point2: Cidade) -> float:
     return math.sqrt((point1[0] - point2[0]) ** 2 + (point1[1] - point2[1]) ** 2)
 
 
-def calculate_distance_only(path: List[Cidade]) -> float:
-    distance = 0
-    n = len(path)
+def calculate_distance_only(
+    path: List[Cidade],
+    depot: Cidade = DEPOT,
+) -> float:
+    """
+    Distância de uma rota de veículo.
+    Com depósito: depot → cidades → depot (VRP realista).
+    Sem depósito (depot=None): ciclo fechado entre as cidades (legado).
+    """
+    if not path:
+        return 0.0
 
-    for i in range(n):
-        distance += calculate_distance(path[i], path[(i + 1) % n])
+    if depot is None:
+        distance = 0.0
+        for i in range(len(path)):
+            distance += calculate_distance(path[i], path[(i + 1) % len(path)])
+        return distance
 
+    distance = calculate_distance(depot, path[0])
+    for i in range(len(path) - 1):
+        distance += calculate_distance(path[i], path[i + 1])
+    distance += calculate_distance(path[-1], depot)
     return distance
 
 
@@ -252,9 +296,12 @@ def calculate_fitness(
     )
 
 
-def calculate_fitness_individuo(individuo: IndividuoVRP) -> float:
+def calculate_fitness_individuo(
+    individuo: IndividuoVRP,
+    num_veiculos: int = NUM_VEICULOS,
+) -> float:
     path, alocacao = individuo
-    return calculate_fitness(path, alocacao)
+    return calculate_fitness(path, alocacao, num_veiculos)
 
 
 def order_crossover(
@@ -291,12 +338,16 @@ def crossover_alocacao(
     return reparar_alocacao(filho, path, num_veiculos)
 
 
-def crossover_vrp(parent1: IndividuoVRP, parent2: IndividuoVRP) -> IndividuoVRP:
+def crossover_vrp(
+    parent1: IndividuoVRP,
+    parent2: IndividuoVRP,
+    num_veiculos: int = NUM_VEICULOS,
+) -> IndividuoVRP:
     path1, aloc1 = parent1
     path2, aloc2 = parent2
 
     child_path = order_crossover(path1, path2)
-    child_aloc = crossover_alocacao(aloc1, aloc2, child_path)
+    child_aloc = crossover_alocacao(aloc1, aloc2, child_path, num_veiculos)
 
     return child_path, child_aloc
 
@@ -330,16 +381,14 @@ def mutate_alocacao(
 def mutate_individuo(
     individuo: IndividuoVRP,
     mutation_probability: float,
+    num_veiculos: int = NUM_VEICULOS,
 ) -> IndividuoVRP:
     path, alocacao = individuo
     path = mutate_path(path, mutation_probability)
-    alocacao = mutate_alocacao(alocacao, path, mutation_probability)
+    alocacao = mutate_alocacao(
+        alocacao, path, mutation_probability, num_veiculos
+    )
     return path, alocacao
-
-
-def mutate(solution: List[Cidade], mutation_probability: float) -> List[Cidade]:
-    """Compatibilidade com demos antigos (só ordem, sem alocação)."""
-    return mutate_path(solution, mutation_probability)
 
 
 def sort_population(
@@ -350,45 +399,3 @@ def sort_population(
     combined.sort(key=lambda x: x[1])
     sorted_population, sorted_fitness = zip(*combined)
     return list(sorted_population), list(sorted_fitness)
-
-
-if __name__ == '__main__':
-    from config import (
-        N_CIDADES,
-        POPULATION_SIZE,
-        N_GENERATIONS,
-        MUTATION_PROBABILITY,
-        SEED,
-    )
-
-    random.seed(SEED)
-    cities_locations = [
-        (random.randint(0, 100), random.randint(0, 100))
-        for _ in range(N_CIDADES)
-    ]
-
-    for city in cities_locations:
-        city_priorities[city] = random.randint(1, 10)
-
-    population = generate_random_population(cities_locations, POPULATION_SIZE)
-
-    for generation in range(N_GENERATIONS):
-        population_fitness = [
-            calculate_fitness_individuo(ind) for ind in population
-        ]
-        population, population_fitness = sort_population(
-            population, population_fitness
-        )
-
-        best_fitness = population_fitness[0]
-        print(f"Generation {generation}: Best fitness = {best_fitness}")
-
-        new_population = [population[0]]
-
-        while len(new_population) < POPULATION_SIZE:
-            parent1, parent2 = random.choices(population[:10], k=2)
-            child = crossover_vrp(parent1, parent2)
-            child = mutate_individuo(child, MUTATION_PROBABILITY)
-            new_population.append(child)
-
-        population = new_population
