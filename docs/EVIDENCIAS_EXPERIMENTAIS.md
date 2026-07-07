@@ -27,7 +27,7 @@ python benchmark_comparativo.py
 | Rota Aleatória | Baseline inferior (ordem e alocação aleatórias) |
 | Vizinho Mais Próximo | Heurística construtiva a partir do depósito |
 | Greedy por Prioridade | Críticos primeiro, alocação por carga |
-| Ótimo (força bruta) | Apenas com ≤ 7 cidades |
+| Ótimo (força bruta) | ≤ 6 entregas, ≤ 6 veículos, veículos ≤ entregas |
 
 ### Três experimentos com configurações do AG
 
@@ -92,9 +92,12 @@ Configuração: `configurar_cenario()` ou CSV via `parse_pedidos_csv()`.
 |---------|-------------|
 | **Distância** | Soma das rotas (com depósito), em unidades do mapa |
 | **Fitness** | Distância + penalidades (prioridade, carga, autonomia) |
-| **Viável** | Todos os veículos respeitam capacidade (kits) e autonomia |
+| **Viável** | Capacidade respeitada na operação efetiva; autonomia OK por veículo (benchmarks usam AG bruto) |
+| **Remanescentes** | Kits/unidades que ficaram no hospital por falta de capacidade (após priorização) |
 | **Tempo** | Segundos de execução |
 | **Conv.** | Geração de convergência (só AG) |
+
+No fluxo interativo (`python tsp.py`), as mesmas métricas aparecem na **aba Análise** do painel e no arquivo **`melhor_rota.txt`** (módulo `metricas_benchmark.py`).
 
 ---
 

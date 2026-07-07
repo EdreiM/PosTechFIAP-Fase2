@@ -47,6 +47,7 @@ from dados_hospitalares import (
     obter_tipo,
     parse_pedidos_csv,
     prioridade_para_tipo,
+    priorizar_entregas_capacidade,
     resumo_tipos,
 )
 
@@ -109,6 +110,23 @@ class TestConfigUI:
         assert p.capacidade_veiculo in OPCOES_CAPACIDADE
         assert p.distancia_maxima_veiculo in OPCOES_AUTONOMIA
         assert p.arquivo_csv is None
+
+    def test_avisos_benchmark_muitos_veiculos(self):
+        from config_ui import avisos_benchmark_solucao_otima
+
+        avisos = avisos_benchmark_solucao_otima(8, 5)
+        assert any("6 veículos" in a for a in avisos)
+
+    def test_avisos_benchmark_muitas_entregas(self):
+        from config_ui import avisos_benchmark_solucao_otima
+
+        avisos = avisos_benchmark_solucao_otima(4, 7)
+        assert any("limitações computacionais" in a for a in avisos)
+
+    def test_avisos_benchmark_cenario_viavel(self):
+        from config_ui import avisos_benchmark_solucao_otima
+
+        assert avisos_benchmark_solucao_otima(4, 5) == []
 
 
 # =============================================================================
@@ -217,6 +235,127 @@ class TestDadosHospitalares:
         assert "UTI Norte" in texto
         assert "INSUMO" in texto
 
+    def test_priorizar_entregas_capacidade(self):
+        cities = DEFAULT_PROBLEMS[5].copy()
+        configurar_cenario(cities, seed=42, n_cidades=5, modo="fixo")
+        path = cities.copy()
+        alocacao = {c: i % 2 for i, c in enumerate(path)}
+        resultado = priorizar_entregas_capacidade(
+            path, alocacao, num_veiculos=2, capacidade_veiculo=30
+        )
+        assert resultado["houve_corte"] is True
+        assert resultado["kits_hospital"] > 0
+        assert resultado["kits_entregues"] <= 60
+        for rota in resultado["rotas_efetivas"]:
+            carga = sum(ga.city_demands[c] for c in rota)
+            assert carga <= 30
+
+    def test_priorizar_respeita_prioridade(self):
+        cities = DEFAULT_PROBLEMS[5].copy()
+        configurar_cenario(cities, seed=42, n_cidades=5, modo="fixo")
+        path = cities.copy()
+        alocacao = {c: 0 for c in path}
+        resultado = priorizar_entregas_capacidade(
+            path, alocacao, num_veiculos=1, capacidade_veiculo=20
+        )
+        if resultado["remanescentes"]:
+            min_entregue = min(
+                ga.city_priorities[c] for c in resultado["path_efetivo"]
+            )
+            max_hospital = max(
+                ga.city_priorities[c] for c in resultado["remanescentes"]
+            )
+            assert min_entregue >= max_hospital
+
+    def _assert_veiculos_saturados(self, resultado, capacidade_veiculo):
+        """Nenhum remanescente cabe no slack de veículos em operação."""
+        for carga in resultado["carga_por_veiculo"]:
+            if carga == 0:
+                continue
+            slack = capacidade_veiculo - carga
+            for cidade in resultado["remanescentes"]:
+                assert ga.city_demands.get(cidade, 0) > slack
+
+    def test_priorizar_maximiza_carga_no_corte(self):
+        cities = [(0, 0), (10, 0), (20, 0), (30, 0)]
+        ga.city_priorities.clear()
+        ga.city_demands.clear()
+        ga.city_names.clear()
+        ga.city_types.clear()
+        configs = [
+            (10, 40),
+            (9, 40),
+            (8, 10),
+            (7, 10),
+        ]
+        for cidade, (prio, demanda) in zip(cities, configs):
+            ga.city_priorities[cidade] = prio
+            ga.city_demands[cidade] = demanda
+            ga.city_names[cidade] = f"Unidade {cidade[0]}"
+            ga.city_types[cidade] = "REGULAR"
+
+        path = cities.copy()
+        alocacao = {c: 0 for c in path}
+        capacidade = 40
+        resultado = priorizar_entregas_capacidade(
+            path, alocacao, num_veiculos=2, capacidade_veiculo=capacidade
+        )
+
+        assert resultado["houve_corte"] is True
+        assert resultado["kits_entregues"] == 80
+        assert resultado["utilizacao_maxima"] is True
+        assert sorted(resultado["carga_por_veiculo"]) == [40, 40]
+        self._assert_veiculos_saturados(resultado, capacidade)
+
+    def test_priorizar_preenchimento_slack_no_corte(self):
+        cities = [(0, 0), (10, 0), (20, 0), (30, 0), (40, 0)]
+        ga.city_priorities.clear()
+        ga.city_demands.clear()
+        ga.city_names.clear()
+        ga.city_types.clear()
+        configs = [
+            (10, 35),
+            (9, 35),
+            (8, 5),
+            (7, 5),
+            (3, 20),
+        ]
+        for cidade, (prio, demanda) in zip(cities, configs):
+            ga.city_priorities[cidade] = prio
+            ga.city_demands[cidade] = demanda
+            ga.city_names[cidade] = f"Unidade {cidade[0]}"
+            ga.city_types[cidade] = "REGULAR"
+
+        path = cities.copy()
+        alocacao = {c: 0 for c in path}
+        capacidade = 40
+        resultado = priorizar_entregas_capacidade(
+            path, alocacao, num_veiculos=2, capacidade_veiculo=capacidade
+        )
+
+        assert resultado["houve_corte"] is True
+        assert resultado["kits_entregues"] == 80
+        assert resultado["utilizacao_maxima"] is True
+        assert all(c == capacidade for c in resultado["carga_por_veiculo"])
+        self._assert_veiculos_saturados(resultado, capacidade)
+
+    def test_priorizar_sem_corte_mantem_comportamento(self):
+        cities = DEFAULT_PROBLEMS[5].copy()
+        configurar_cenario(cities, seed=42, n_cidades=5, modo="fixo")
+        path = cities.copy()
+        alocacao = {c: i % 2 for i, c in enumerate(path)}
+        capacidade = 80
+        resultado = priorizar_entregas_capacidade(
+            path, alocacao, num_veiculos=2, capacidade_veiculo=capacidade
+        )
+
+        assert resultado["houve_corte"] is False
+        assert resultado["kits_hospital"] == 0
+        assert resultado["entregas_efetivas"] == len(path)
+        assert resultado["utilizacao_maxima"] is False
+        for carga in resultado["carga_por_veiculo"]:
+            assert carga <= capacidade
+
     def test_montar_ordem_global(self):
         cities = DEFAULT_PROBLEMS[5].copy()
         configurar_cenario(cities, seed=42, n_cidades=5, modo="fixo")
@@ -277,9 +416,35 @@ class TestGeneticAlgorithm:
         assert len(rotas) == 2
         assert sum(len(r) for r in rotas) == 4
 
-    def test_gerar_alocacao_usa_todos_veiculos(self):
+    def test_gerar_alocacao_indices_validos(self):
         alocacao = ga.gerar_alocacao_aleatoria(CIDADES_AG, num_veiculos=3)
-        assert {alocacao[c] for c in CIDADES_AG} == {0, 1, 2}
+        assert len(alocacao) == 4
+        assert all(0 <= alocacao[c] < 3 for c in CIDADES_AG)
+
+    def test_reparar_alocacao_nao_forca_veiculo_vazio(self):
+        rota = CIDADES_AG.copy()
+        alocacao = {c: 0 for c in rota}
+        reparada = ga.reparar_alocacao(alocacao, rota, num_veiculos=6)
+        rotas = ga.dividir_rota_em_veiculos(rota, reparada, num_veiculos=6)
+        assert len(rotas) == 6
+        assert sum(len(r) for r in rotas) == 4
+        assert sum(1 for r in rotas if not r) >= 2
+
+    def test_veiculos_excedentes_permanecem_ociosos(self):
+        _configurar_dados_ag()
+        cidades = [(i * 10, 0) for i in range(5)]
+        for cidade in cidades:
+            ga.city_priorities[cidade] = 5
+            ga.city_demands[cidade] = 10
+        rota = cidades.copy()
+        alocacao = {c: 0 for c in cidades}
+        rotas = ga.dividir_rota_em_veiculos(rota, alocacao, num_veiculos=8)
+        assert len(rotas) == 8
+        assert sum(len(r) for r in rotas) == 5
+        assert sum(1 for r in rotas if not r) == 7
+        fitness_5v = ga.calculate_fitness(rota, alocacao, num_veiculos=5)
+        fitness_8v = ga.calculate_fitness(rota, alocacao, num_veiculos=8)
+        assert fitness_8v < fitness_5v
 
     def test_calcular_distancia_operacao(self):
         rota = CIDADES_AG.copy()
@@ -340,6 +505,20 @@ class TestGeneticAlgorithm:
         muitas = [(i, 0) for i in range(15)]
         otimo = ga.calcular_solucao_otima_vrp(muitas, limite_cidades=10)
         assert math.isnan(otimo)
+
+    def test_solucao_otima_omitida_mais_veiculos_que_entregas(self):
+        otimo = ga.calcular_solucao_otima_vrp(CIDADES_AG, num_veiculos=8, limite_cidades=10)
+        assert math.isnan(otimo)
+
+    def test_solucao_otima_omitida_7_entregas(self):
+        cities = DEFAULT_PROBLEMS[10][:7]
+        otimo = ga.calcular_solucao_otima_vrp(cities, num_veiculos=4, limite_cidades=7)
+        assert math.isnan(otimo)
+
+    def test_solucao_otima_6_entregas_calculada(self):
+        cities = DEFAULT_PROBLEMS[10][:6]
+        otimo = ga.calcular_solucao_otima_vrp(cities, num_veiculos=4, limite_cidades=7)
+        assert otimo > 0
 
     def test_distancia_com_deposito(self):
         rota = [CIDADES_AG[0], CIDADES_AG[1]]
@@ -535,6 +714,24 @@ Veículo 3 (5 paradas):
         assert "79/80" in resposta
         assert "Unidade Domiciliar 11" in resposta
 
+    def test_chat_remanescentes_hospital(self):
+        from groq_perguntas import responder_pergunta
+
+        remanescentes = (
+            "KITS REMANESCENTES NO HOSPITAL CENTRAL\n"
+            "  • Lab. Análises [INSUMO] (2 prioridade, 28 kits)"
+        )
+        resposta = responder_pergunta(
+            "O que ficou no hospital?",
+            self.TEXTO_VEICULOS,
+            "resumo",
+            self.TEXTO_ROTAS,
+            "", "", "", "",
+            texto_remanescentes=remanescentes,
+        )
+        assert "hospital" in resposta.lower()
+        assert "Lab" in resposta or "REMESCENTES" in resposta.upper()
+
     def test_chat_medicamentos_por_tipo(self):
         from dados_hospitalares import montar_entregas_por_tipo
         from groq_perguntas import responder_pergunta
@@ -556,6 +753,240 @@ Veículo 3 (5 paradas):
         assert "INSUMO" in resposta
         assert "dipirona" not in resposta.lower()
         assert "UTI Norte" in resposta or "categorias de kits" in resposta
+
+
+# =============================================================================
+# Dashboard — mapa com entregues vs remanescentes
+# =============================================================================
+
+
+class TestDashboardMapa:
+    def test_estilo_entregue_tem_ordem(self):
+        from dashboard_ui import _estilo_no_mapa
+
+        cidade = (100, 200)
+        ordem = {cidade: 3}
+        estilo = _estilo_no_mapa(
+            cidade, ordem, set(), {cidade: 10}, {cidade: "CRITICO"}
+        )
+        assert estilo["label"] == "3"
+        assert estilo["no_hospital"] is False
+        assert estilo["fill"] == "#b91c1c"
+
+    def test_estilo_remanescente_hospital(self):
+        from dashboard_ui import _estilo_no_mapa
+
+        cidade = (100, 200)
+        estilo = _estilo_no_mapa(
+            cidade, {}, {cidade}, {cidade: 2}, {cidade: "INSUMO"}
+        )
+        assert estilo["label"] == "—"
+        assert estilo["no_hospital"] is True
+        assert estilo["fill"] == "#94a3b8"
+
+    def test_estilos_para_todas_cidades_20_com_corte(self):
+        from dashboard_ui import _estilo_no_mapa
+
+        random.seed(99)
+        cities = [
+            (random.randint(60, 790), random.randint(10, 390))
+            for _ in range(20)
+        ]
+        configurar_cenario(cities, seed=99, n_cidades=20, modo="aleatorio")
+        path = cities.copy()
+        random.shuffle(path)
+        alocacao = {c: i % 2 for i, c in enumerate(path)}
+        resultado = priorizar_entregas_capacidade(
+            path, alocacao, num_veiculos=2, capacidade_veiculo=40
+        )
+
+        ordem_visita = {
+            c: i + 1 for i, c in enumerate(resultado["path_efetivo"])
+        }
+        remanescentes = set(resultado["remanescentes"])
+
+        for cidade in cities:
+            estilo = _estilo_no_mapa(
+                cidade,
+                ordem_visita,
+                remanescentes,
+                ga.city_priorities,
+                ga.city_types,
+            )
+            assert estilo["label"]
+            if cidade in remanescentes:
+                assert estilo["no_hospital"] is True
+                assert estilo["label"] == "—"
+            else:
+                assert estilo["no_hospital"] is False
+                assert estilo["label"] == str(ordem_visita[cidade])
+
+        assert len(resultado["path_efetivo"]) + len(remanescentes) == 20
+        assert len(remanescentes) > 0
+
+
+class TestMapaVeiculosOciosos:
+    def test_indices_veiculos_ociosos(self):
+        from draw_functions import indices_veiculos_ociosos
+
+        rotas = [[(0, 0)], [], [(1, 1)], [], []]
+        assert indices_veiculos_ociosos(rotas) == [1, 3, 4]
+
+    def test_posicoes_marcadores_quantidade(self):
+        from draw_functions import posicoes_marcadores_veiculos_ociosos
+
+        posicoes = posicoes_marcadores_veiculos_ociosos((400, 200), 5)
+        assert len(posicoes) == 5
+        assert len(set(posicoes)) == 5
+
+    def test_montar_legenda_veiculos_em_rota_e_hospital(self):
+        from dashboard_ui import NOMES_CORES_VEICULOS
+        from draw_functions import montar_legenda_veiculos
+
+        rotas = [[(0, 0)], [], [(1, 1)], [], [], [], [], []]
+        texto = montar_legenda_veiculos(rotas, NOMES_CORES_VEICULOS)
+        assert "Em rota:" in texto
+        assert "V1 azul" in texto
+        assert "V3 verde" in texto
+        assert "No hospital:" in texto
+        assert "V2 vermelho (ocioso)" in texto
+        assert "V8 cinza (ocioso)" in texto
+
+    def test_veiculo_ativo_nao_listado_como_ocioso(self):
+        from draw_functions import indices_veiculos_ociosos
+
+        rotas = [[(0, 0)], [], [], [(1, 1)], [], [], [], []]
+        ociosos = indices_veiculos_ociosos(rotas)
+        assert 0 not in ociosos
+        assert 3 not in ociosos
+        assert 1 in ociosos
+        assert 6 in ociosos
+
+    def test_posicao_label_trecho(self):
+        from draw_functions import _posicao_label_trecho
+
+        p = _posicao_label_trecho((0, 0), (10, 0), offset=5)
+        assert p == (5, 0)
+
+
+class TestDashboardAnalise:
+    def _metricas_exemplo(self, **kwargs) -> "MetricasComparativoMetodos":
+        from metricas_benchmark import MetricasComparativoMetodos
+
+        base = dict(
+            fitness_inicial=3200.0,
+            distancia_inicial=3300.0,
+            fitness_final=2800.0,
+            fitness_final_prioridade=2900.0,
+            melhoria_fitness_pct=9.38,
+            melhoria_distancia_pct=15.15,
+            geracao_convergencia=190,
+            distancia_aleatoria=3100.0,
+            distancia_vizinho_proximo=2950.0,
+            distancia_greedy_prioridade=2880.0,
+            fitness_target_solution=2750.0,
+            diferenca_benchmark_pct=1.82,
+            num_veiculos=4,
+            total_entregas=5,
+            motivo_otimo_omitido="",
+        )
+        base.update(kwargs)
+        return MetricasComparativoMetodos(**base)
+
+    def test_bloco_analise_com_otimo(self):
+        from metricas_benchmark import montar_bloco_analise_metricas
+
+        bloco = montar_bloco_analise_metricas(self._metricas_exemplo())
+        assert "Ótimo VRP (força bruta)" in bloco
+        assert "2750.00" in bloco
+        assert "1.82%" in bloco
+        assert "Vizinho mais próximo" in bloco
+        assert "Greedy por prioridade" in bloco
+        assert "Melhoria de fitness" in bloco
+
+    def test_bloco_analise_sem_otimo_muitas_entregas(self):
+        from metricas_benchmark import montar_bloco_analise_metricas
+
+        bloco = montar_bloco_analise_metricas(
+            self._metricas_exemplo(
+                fitness_target_solution=float("nan"),
+                diferenca_benchmark_pct=float("nan"),
+                total_entregas=13,
+                motivo_otimo_omitido="13 entregas (≥ 7): limitações computacionais",
+            )
+        )
+        assert "N/A" in bloco
+        assert "≥ 7" in bloco or "13 entregas" in bloco
+
+    def test_bloco_analise_sem_otimo_excesso_veiculos(self):
+        from metricas_benchmark import (
+            MetricasComparativoMetodos,
+            montar_bloco_analise_metricas,
+            motivo_omissao_benchmark,
+        )
+
+        motivo = motivo_omissao_benchmark(8, 4, 7, float("nan"))
+        bloco = montar_bloco_analise_metricas(
+            MetricasComparativoMetodos(
+                fitness_inicial=2000,
+                distancia_inicial=2100,
+                fitness_final=1200,
+                fitness_final_prioridade=1300,
+                melhoria_fitness_pct=35,
+                melhoria_distancia_pct=42,
+                geracao_convergencia=50,
+                distancia_aleatoria=1500,
+                distancia_vizinho_proximo=1400,
+                distancia_greedy_prioridade=1350,
+                fitness_target_solution=float("nan"),
+                diferenca_benchmark_pct=float("nan"),
+                num_veiculos=8,
+                total_entregas=4,
+                motivo_otimo_omitido=motivo,
+            )
+        )
+        assert "veículos ≤ entregas" in bloco
+
+
+class TestMetricasBenchmark:
+    def test_calcular_heuristicas_retorna_distancias(self):
+        from metricas_benchmark import calcular_distancias_heuristicas
+        from config import DEFAULT_PROBLEMS
+
+        cities = DEFAULT_PROBLEMS[5]
+        dist_nn, dist_gr = calcular_distancias_heuristicas(cities, num_veiculos=2)
+        assert dist_nn > 0
+        assert dist_gr > 0
+
+    def test_motivo_omissao_7_entregas(self):
+        from metricas_benchmark import motivo_omissao_benchmark
+
+        motivo = motivo_omissao_benchmark(4, 7, 7, float("nan"))
+        assert "≥ 7" in motivo
+
+    def test_bloco_contem_todas_metricas_ag(self):
+        from metricas_benchmark import montar_bloco_analise_metricas
+
+        bloco = montar_bloco_analise_metricas(
+            TestDashboardAnalise()._metricas_exemplo()
+        )
+        assert "Distância inicial (população)" in bloco
+        assert "3300.00" in bloco
+        assert "Geração de convergência" in bloco
+        assert "190" in bloco
+        assert "Melhoria de distância" in bloco
+        assert "Frota: 4 veículos | Entregas: 5" in bloco
+        assert "COMPARATIVO DE MÉTODOS" in bloco
+        assert "ANÁLISE RELATIVA" in bloco
+
+    def test_economia_vs_ag_no_bloco(self):
+        from metricas_benchmark import montar_bloco_analise_metricas
+
+        bloco = montar_bloco_analise_metricas(
+            TestDashboardAnalise()._metricas_exemplo()
+        )
+        assert "Economia vs Rota aleatória" in bloco
+        assert "Economia vs Vizinho mais próximo" in bloco
 
 
 # =============================================================================
@@ -653,16 +1084,16 @@ class TestRegressaoBugsUsuario:
         assert_instrucoes_veiculo_coerentes(texto, 3)
         assert "Unidade Domiciliar 11 (p10)" in texto or "p10" in texto
 
-    def test_veiculo_4_mostra_restricao_81_80(self):
+    def test_veiculo_4_capacidade_respeitada_apos_priorizacao(self):
         from groq_respostas_locais import gerar_instrucoes_veiculo_local
 
         texto = gerar_instrucoes_veiculo_local(
             4,
-            _CENARIO_18_VEICULOS.split("\n")[3] + "\n",
+            "Veículo 4 | 3 entregas | carga 60/80 | distância 728/1500 | status: operacionalmente viável\n",
             _CENARIO_18_ROTAS,
         )
-        assert "81/80" in texto
-        assert "com restrição" in texto or "81/80" in texto
+        assert "81/80" not in texto
+        assert "com restrição" not in texto.lower() or "autonomia" in texto.lower()
 
     def test_benchmark_18_entregas_retorna_nan(self):
         cities = [(i * 10, i * 5) for i in range(18)]
@@ -721,7 +1152,7 @@ Veículo 3: priorize Unidade Domiciliar 11 (p10).
         from groq_contexto import carregar_contexto_sistema
 
         ctx = carregar_contexto_sistema()
-        assert "> 7 entregas" in ctx or "≤ 7 entregas" in ctx
+        assert "≥ 7 entregas" in ctx or "menos de 7 entregas" in ctx
         assert "p9" in ctx.lower() or "9–10" in ctx
         assert "última parada" in ctx.lower()
 

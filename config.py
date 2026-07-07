@@ -85,6 +85,7 @@ POPULATION_SIZE = 100
 N_GENERATIONS = 1000
 MUTATION_PROBABILITY = 0.5
 LIMITE_SEM_MELHORA = 100
+# Com entregas >= este valor, o benchmark por força bruta é omitido
 LIMITE_CIDADES_BENCHMARK = 7
 
 # Configurações para experimentos comparativos do AG (experimentos_ag.py)

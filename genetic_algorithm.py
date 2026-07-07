@@ -50,19 +50,11 @@ def gerar_alocacao_aleatoria(
     cities: List[Cidade],
     num_veiculos: int = NUM_VEICULOS,
 ) -> Alocacao:
-    """Atribui cada cidade a um veículo; garante ao menos 1 cidade por veículo."""
-    n = len(cities)
-    embaralhadas = cities.copy()
-    random.shuffle(embaralhadas)
-
-    alocacao: Alocacao = {}
-    for veiculo in range(min(num_veiculos, n)):
-        alocacao[embaralhadas[veiculo]] = veiculo
-
-    for cidade in embaralhadas[num_veiculos:]:
-        alocacao[cidade] = random.randint(0, num_veiculos - 1)
-
-    return alocacao
+    """Atribui cada cidade a um veículo aleatoriamente."""
+    return {
+        cidade: random.randint(0, num_veiculos - 1)
+        for cidade in cities
+    }
 
 
 def reparar_alocacao(
@@ -70,7 +62,7 @@ def reparar_alocacao(
     path: List[Cidade],
     num_veiculos: int = NUM_VEICULOS,
 ) -> Alocacao:
-    """Garante índices válidos e ao menos uma cidade por veículo."""
+    """Garante índices válidos para cada cidade do path."""
     alocacao = alocacao.copy()
 
     for cidade in path:
@@ -78,14 +70,6 @@ def reparar_alocacao(
             alocacao[cidade] = random.randint(0, num_veiculos - 1)
         elif alocacao[cidade] < 0 or alocacao[cidade] >= num_veiculos:
             alocacao[cidade] = random.randint(0, num_veiculos - 1)
-
-    usados = set(alocacao[c] for c in path)
-
-    for veiculo in range(num_veiculos):
-        if veiculo not in usados:
-            cidade = random.choice(path)
-            alocacao[cidade] = veiculo
-            usados.add(veiculo)
 
     return alocacao
 
@@ -165,7 +149,7 @@ def melhor_alocacao_exaustiva(
     melhor_alocacao: Alocacao = {}
 
     for atribuicoes in itertools.product(range(num_veiculos), repeat=n):
-        if len(set(atribuicoes)) < num_veiculos:
+        if num_veiculos <= n and len(set(atribuicoes)) < num_veiculos:
             continue
 
         alocacao = {path[i]: atribuicoes[i] for i in range(n)}
@@ -185,10 +169,12 @@ def calcular_solucao_otima_vrp(
 ) -> float:
     """
     Força bruta com ordem + alocação real.
-    Viável apenas com poucas cidades (n <= 7).
+    Viável apenas com n < limite_cidades (padrão: < 7 entregas) e num_veiculos <= n.
     """
     n = len(cities_locations)
-    if n > limite_cidades:
+    if n >= limite_cidades:
+        return float("nan")
+    if num_veiculos > n:
         return float("nan")
 
     melhor = float("inf")
@@ -271,10 +257,12 @@ def calculate_fitness(
     load_penalty = 0
     autonomy_penalty = 0
     empty_penalty = 0
+    penalizar_vazio = num_veiculos <= len(path)
 
     for indice, rota in enumerate(rotas_veiculos):
         if not rota:
-            empty_penalty += PENALIDADE_VEICULO_VAZIO
+            if penalizar_vazio:
+                empty_penalty += PENALIDADE_VEICULO_VAZIO
             continue
 
         carga = sum(city_demands.get(cidade, 0) for cidade in rota)

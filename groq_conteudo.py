@@ -4,6 +4,8 @@ import math
 import re
 from typing import Dict
 
+from config import LIMITE_CIDADES_BENCHMARK
+from metricas_benchmark import motivo_omissao_benchmark
 from groq_analysis import _fallback_analisar
 from groq_relatorio import _fallback_relatorio
 from groq_relatorio_semanal import _fallback_relatorio_semanal
@@ -94,6 +96,7 @@ def _fallback_completo(**kwargs) -> Dict[str, str]:
         kwargs["num_veiculos"],
         kwargs["distancia_aleatoria"],
         kwargs["fitness_target_solution"],
+        kwargs.get("texto_remanescentes", ""),
     )
     relatorio_semanal = _fallback_relatorio_semanal(
         kwargs["texto_resumo_semanal"],
@@ -133,6 +136,8 @@ def gerar_conteudo_completo(
     texto_resumo_semanal,
     capacidade_veiculo,
     distancia_maxima_veiculo,
+    texto_remanescentes="",
+    houve_corte_capacidade=False,
 ) -> Dict[str, str]:
     otimo_txt = (
         f"{fitness_target_solution:.2f}"
@@ -145,12 +150,19 @@ def gerar_conteudo_completo(
         else "N/A"
     )
     benchmark_nao_calculado = math.isnan(fitness_target_solution)
-    nota_benchmark = (
-        "Ótimo VRP NÃO foi calculado (mais de 7 entregas — limite da força bruta). "
-        "Compare AG vs rota aleatória; NÃO diga que o AG falhou por causa do ótimo."
-        if benchmark_nao_calculado
-        else f"Ótimo VRP calculado: {otimo_txt} km (diferença: {diff_txt})."
-    )
+    if benchmark_nao_calculado:
+        motivo = motivo_omissao_benchmark(
+            num_veiculos,
+            total_cidades,
+            LIMITE_CIDADES_BENCHMARK,
+            fitness_target_solution,
+        )
+        nota_benchmark = (
+            f"Ótimo VRP NÃO foi calculado ({motivo}). "
+            "Compare AG vs rota aleatória; NÃO diga que o AG falhou por causa do ótimo."
+        )
+    else:
+        nota_benchmark = f"Ótimo VRP calculado: {otimo_txt} km (diferença: {diff_txt})."
 
     kwargs = {
         "fitness_inicial": fitness_inicial,
@@ -169,6 +181,8 @@ def gerar_conteudo_completo(
         "distancia_aleatoria": distancia_aleatoria,
         "texto_veiculos": texto_veiculos,
         "texto_resumo_semanal": texto_resumo_semanal,
+        "texto_remanescentes": texto_remanescentes,
+        "houve_corte_capacidade": houve_corte_capacidade,
     }
 
     prompt = f"""
@@ -189,6 +203,9 @@ Dados da operação:
 Veículos:
 {texto_veiculos}
 
+Kits remanescentes no hospital (priorização por capacidade):
+{texto_remanescentes if houve_corte_capacidade else "Nenhum — frota absorveu toda a demanda."}
+
 Projeção semanal (5 dias úteis — NÃO é histórico real):
 {texto_resumo_semanal}
 
@@ -202,7 +219,7 @@ Cada marcador em linha própria; conteúdo começa na linha seguinte.
 (qualidade, convergência, prioridades, benchmark, conclusão — até 200 palavras)
 
 === RELATORIO_DIARIO ===
-(resumo, eficiência, capacidade/autonomia POR VEÍCULO, prioridades, recomendações — até 250 palavras)
+(resumo, eficiência, capacidade/autonomia POR VEÍCULO, prioridades, kits no hospital se houver, recomendações — até 250 palavras)
 
 === RELATORIO_SEMANAL ===
 (projeção ×5 dias úteis, tendências, recomendações — deixe claro que é projeção — até 250 palavras)
@@ -214,6 +231,8 @@ Regras:
 - Português operacional, sem tom acadêmico.
 - Prioridade clínica = número p9/p10 maior, NÃO a última parada da rota.
 - Não diga "ajuste a rota" — a ordem do AG é a oficial.
+- Veículos NUNCA excedem capacidade — kits excedentes ficam no hospital (prioridade mais baixa).
+- Se houver remanescentes, cite unidades e kits na análise e nos relatórios.
 - Use capacidade/autonomia dos dados ({capacidade_veiculo} kits, {distancia_maxima_veiculo} km).
 """
 

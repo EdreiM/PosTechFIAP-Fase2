@@ -48,7 +48,7 @@ Documento de avaliação manual conforme exigido pelo Tech Challenge Fase 2 (Pro
 
 | Aspecto | Avaliação |
 |---------|-----------|
-| Correção | Boa — avalia cada veículo separadamente |
+| Correção | Boa — avalia cada veículo separadamente; inclui kits remanescentes no hospital |
 | Utilidade | Alta — inclui recomendações para o próximo dia |
 
 ### 3. Relatório operacional semanal
@@ -87,7 +87,9 @@ Documento de avaliação manual conforme exigido pelo Tech Challenge Fase 2 (Pro
 
 | Pergunta | Resposta esperada |
 |----------|-------------------|
-| Todos os veículos respeitam capacidade e autonomia? | Sim/Não por veículo, com números |
+| Todos os veículos respeitam capacidade? | Sim — capacidade é respeitada; excedente fica no hospital |
+| O que ficou no hospital? | Lista unidades/kits remanescentes (prioridade mais baixa) |
+| Quais medicamentos temos entregues? | Categorias CRITICO/REGULAR/INSUMO por unidade (não nomes de fármacos) |
 | Qual veículo tem maior carga? | Identifica veículo e valor X/Y (Y = capacidade configurada) |
 | Quais cidades têm prioridade 10? | Lista posições ou quantidade |
 | A solução ficou melhor que a rota aleatória? | Comparativo diário/semanal |
@@ -100,6 +102,7 @@ Documento de avaliação manual conforme exigido pelo Tech Challenge Fase 2 (Pro
 - Contexto fixo em `CONTEXTO_IA.md` evita confusão (kits, depósito, capacidade da execução)
 - Uma chamada API para relatórios (economia de tokens vs. 4 chamadas separadas)
 - Fallback local se Groq indisponível — simulação nunca trava
+- Respostas locais para instruções, tipos de medicamento e remanescentes no hospital
 - Chat com histórico de conversa
 
 ## Limitações conhecidas

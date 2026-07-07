@@ -81,21 +81,23 @@ flowchart TB
 2. **Resumo dos pedidos** — tabela + `avaliar_viabilidade_frota()`.
 3. **`dados_hospitalares.py`** — demandas fixas, CSV ou sorteio (modo aleatório).
 4. **`tsp.py`** + **`ag_runner.executar_ag()`** — Pygame (gráfico + mapa).
-5. Métricas, divisão por veículo, benchmark VRP (se ≤ 7 cidades).
-6. **Groq (LLM)** — uma chamada gera análise, relatórios e instruções (`groq_conteudo.py`); fallback local se API indisponível.
-7. **`dashboard_ui.py`** — painel com abas e chat (histórico de conversa).
-8. **`melhor_rota.txt`** e **`results/`**.
+5. **`priorizar_entregas_capacidade()`** — aplica capacidade da frota; remanescentes no hospital.
+6. Métricas, divisão por veículo, benchmark VRP (≤ 6 entregas) + heurísticas na aba Análise.
+7. **Groq (LLM)** — uma chamada gera análise, relatórios e instruções (`groq_conteudo.py`); fallback local se API indisponível.
+8. **`dashboard_ui.py`** — painel com abas e chat (histórico de conversa).
+9. **`melhor_rota.txt`** (inclui bloco de métricas comparativas) e **`results/`**.
 
 ## Módulos principais
 
 | Arquivo | Responsabilidade |
 |---------|------------------|
 | `config_ui.py` | Configuração, resumo de pedidos, viabilidade da frota |
-| `dados_hospitalares.py` | Nomes, tipos, demandas fixas (kits), CSV, viabilidade |
+| `dados_hospitalares.py` | Nomes, tipos, demandas (kits), CSV, viabilidade, priorização por capacidade |
 | `exemplos/pedidos_exemplo.csv` | CSV de exemplo para importar pedidos |
 | `genetic_algorithm.py` | AG, fitness VRP, depósito, restrições |
 | `ag_runner.py` | Execução do AG reutilizável |
 | `heuristics.py` | Heurísticas clássicas de roteamento |
+| `metricas_benchmark.py` | Métricas comparativas (AG, heurísticas, ótimo) — aba Análise e `melhor_rota.txt` |
 | `benchmark_comparativo.py` | Comparativo AG vs heurísticas |
 | `experimentos_ag.py` | 3 experimentos + gráfico de convergência |
 | `tsp.py` | Orquestração principal + Pygame |
@@ -104,6 +106,7 @@ flowchart TB
 | `groq_contexto.py` | Carrega `docs/CONTEXTO_IA.md` para prompts |
 | `groq_utils.py` | Cliente Groq, `.env`, fallback local |
 | `groq_perguntas.py` | Chat com histórico de conversa |
+| `groq_respostas_locais.py` | Respostas locais do chat (instruções, tipos, hospital) |
 | `docs/CONTEXTO_IA.md` | Regras fixas para a IA (VRP, kits, veículos) |
 | `groq_*.py` | Fallbacks e módulos legados de prompt |
 
@@ -111,7 +114,7 @@ flowchart TB
 
 - **Depósito:** rotas iniciam e terminam no hospital (`DEPOT`).
 - **Prioridade:** medicamentos críticos (tipo CRITICO) devem aparecer cedo na rota.
-- **Capacidade:** carga máxima por veículo (kits de medicamentos).
+- **Capacidade:** carga máxima por veículo (kits). Veículos **nunca excedem** capacidade na operação efetiva — kits excedentes ficam no hospital (`priorizar_entregas_capacidade()`).
 - **Autonomia:** distância máxima por veículo (inclui ida/volta ao depósito).
 - **Múltiplos veículos:** alocação evoluída pelo AG.
 
@@ -122,7 +125,7 @@ flowchart TB
 | AG para roteamento | `genetic_algorithm.py`, `ag_runner.py`, `tsp.py` |
 | Restrições realistas | Fitness VRP + tipos de entrega |
 | Depósito / contexto hospitalar | `DEPOT`, `dados_hospitalares.py` |
-| Comparativo com outras abordagens | `benchmark_comparativo.py` |
+| Comparativo com outras abordagens | `metricas_benchmark.py` (fluxo principal) + `benchmark_comparativo.py` |
 | Experimentos com configs do AG | `experimentos_ag.py` |
 | Visualização em mapa | Pygame + aba Mapa (H = hospital) |
 | LLM instruções e relatórios | `groq_*.py` |

@@ -15,6 +15,7 @@ from config import (
     CAPACIDADE_VEICULO,
     CIDADES_FIXAS_DISPONIVEIS,
     DISTANCIA_MAXIMA_VEICULO,
+    LIMITE_CIDADES_BENCHMARK,
     MODO_CIDADES,
     N_CIDADES,
     NUM_VEICULOS,
@@ -30,6 +31,49 @@ from dados_hospitalares import (
     montar_entregas,
     parse_pedidos_csv,
 )
+
+# Limites informados na UI para o benchmark de solução ótima (força bruta)
+MAX_VEICULOS_SOLUCAO_OTIMA = 6
+
+
+def avisos_benchmark_solucao_otima(
+    num_veiculos: int,
+    n_entregas: int,
+    limite_entregas: int = LIMITE_CIDADES_BENCHMARK,
+) -> List[str]:
+    """Mensagens quando o cálculo ótimo por força bruta será omitido."""
+    avisos: List[str] = []
+    if num_veiculos > MAX_VEICULOS_SOLUCAO_OTIMA:
+        avisos.append(
+            f"Mais de {MAX_VEICULOS_SOLUCAO_OTIMA} veículos ({num_veiculos}): "
+            "a solução ótima (força bruta) não será calculada."
+        )
+    if n_entregas >= limite_entregas:
+        avisos.append(
+            f"{n_entregas} entregas (≥ {limite_entregas}): "
+            "o cálculo ótimo não será realizado devido a limitações computacionais."
+        )
+    return avisos
+
+
+def texto_painel_benchmark_solucao_otima(
+    num_veiculos: int,
+    n_entregas: Optional[int],
+) -> tuple[str, str]:
+    """Retorna (texto, cor_hex) para o painel de aviso do benchmark."""
+    if n_entregas is None:
+        return (
+            "Solução ótima: informe entregas (ou importe CSV) para ver se o "
+            "benchmark por força bruta será calculado.",
+            "#64748b",
+        )
+    avisos = avisos_benchmark_solucao_otima(num_veiculos, n_entregas)
+    if avisos:
+        return ("⚠ " + "\n⚠ ".join(avisos), "#b45309")
+    return (
+        "Solução ótima (força bruta) será calculada para comparar com o AG.",
+        "#166534",
+    )
 
 
 @dataclass
@@ -156,6 +200,16 @@ def _confirmar_resumo_pedidos(
         f"Carga média por veículo (referência): {total / max(params.num_veiculos, 1):.1f} kits",
         viabilidade["mensagem"],
     ]
+    excedentes = params.num_veiculos - len(entregas)
+    if excedentes > 0:
+        linhas_resumo.append(
+            f"Aviso: {excedentes} veículo(s) excedente(s) permanecerão no hospital "
+            f"(sem rota nesta execução)."
+        )
+    for aviso in avisos_benchmark_solucao_otima(
+        params.num_veiculos, len(entregas)
+    ):
+        linhas_resumo.append(f"Benchmark ótimo: {aviso}")
     ttk.Label(
         resumo_frame,
         text="\n".join(linhas_resumo),
@@ -168,8 +222,8 @@ def _confirmar_resumo_pedidos(
         ttk.Label(
             dialogo,
             text=(
-                "⚠ Frota insuficiente para a carga total — o AG ainda roda, "
-                "mas veículos tendem a aparecer 'com restrição'."
+                "⚠ Frota insuficiente para a carga total — o AG roda normalmente. "
+                "Entregas de menor prioridade permanecerão no hospital."
             ),
             font=("Segoe UI", 9),
             foreground="#b45309",
@@ -203,7 +257,7 @@ def abrir_configuracao() -> ParametrosSimulacao:
     resultado = {"params": None}
     root = tk.Tk()
     root.title("TSP Logística — Configurar Simulação")
-    root.geometry("520x560")
+    root.geometry("520x620")
     root.resizable(False, False)
 
     frame = ttk.Frame(root, padding=16)
@@ -317,6 +371,20 @@ def abrir_configuracao() -> ParametrosSimulacao:
     )
     spin_veiculos.pack(anchor=tk.W, pady=(2, 8))
 
+    frame_benchmark = ttk.LabelFrame(
+        frame, text="Benchmark — solução ótima (força bruta)", padding=8
+    )
+    frame_benchmark.pack(fill=tk.X, pady=(0, 8))
+
+    lbl_aviso_benchmark = ttk.Label(
+        frame_benchmark,
+        text="",
+        font=("Segoe UI", 9),
+        wraplength=460,
+        justify=tk.LEFT,
+    )
+    lbl_aviso_benchmark.pack(anchor=tk.W, fill=tk.X)
+
     # --- Capacidade e autonomia ---
     frame_frota = ttk.LabelFrame(
         frame, text="Restrições da frota", padding=8
@@ -380,15 +448,50 @@ def abrir_configuracao() -> ParametrosSimulacao:
         if usar_csv:
             for w in controles_modo:
                 w.config(state="disabled")
+            atualizar_aviso_benchmark()
             return
 
         fixo = var_modo.get() == "fixo"
         combo_modo.config(state="readonly")
         combo_n_fixo.config(state="readonly" if fixo else "disabled")
         spin_n_aleatorio.config(state="normal" if not fixo else "disabled")
+        atualizar_aviso_benchmark()
 
+    def _entregas_efetivas_formulario() -> Optional[int]:
+        if var_usar_csv.get():
+            caminho = var_csv_path.get().strip()
+            if not caminho:
+                return None
+            try:
+                return len(parse_pedidos_csv(caminho))
+            except (OSError, ValueError):
+                return None
+        if var_modo.get() == "fixo":
+            try:
+                return int(var_n_fixo.get())
+            except (tk.TclError, ValueError):
+                return None
+        try:
+            return int(var_n_aleatorio.get())
+        except tk.TclError:
+            return None
+
+    def atualizar_aviso_benchmark(*_):
+        try:
+            num_v = int(var_veiculos.get())
+        except tk.TclError:
+            num_v = NUM_VEICULOS
+        texto, cor = texto_painel_benchmark_solucao_otima(
+            num_v, _entregas_efetivas_formulario()
+        )
+        lbl_aviso_benchmark.config(text=texto, foreground=cor)
+
+    for var in (var_veiculos, var_n_fixo, var_n_aleatorio):
+        var.trace_add("write", lambda *_: atualizar_aviso_benchmark())
     var_usar_csv.trace_add("write", lambda *_: atualizar_modo())
+    var_csv_path.trace_add("write", lambda *_: atualizar_aviso_benchmark())
     combo_modo.bind("<<ComboboxSelected>>", atualizar_modo)
+
     atualizar_modo()
 
     def _ler_params_formulario() -> Optional[ParametrosSimulacao]:
@@ -455,12 +558,6 @@ def abrir_configuracao() -> ParametrosSimulacao:
 
         if num_veiculos < 2:
             messagebox.showerror("Erro", "Use pelo menos 2 veículos.")
-            return None
-        if num_veiculos > n_cidades:
-            messagebox.showerror(
-                "Erro",
-                "Veículos não pode ser maior que a quantidade de entregas.",
-            )
             return None
 
         seed = random.randint(1, 999_999) if var_seed_aleatoria.get() else SEED

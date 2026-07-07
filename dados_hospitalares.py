@@ -270,6 +270,8 @@ def avaliar_viabilidade_frota(
             f"Carga total ({total} kits) excede a frota "
             f"({num_veiculos} × {capacidade_veiculo} = {capacidade_frota} kits). "
             f"Faltam {deficit} kits de capacidade. "
+            f"O sistema priorizará entregas de maior prioridade; "
+            f"o restante permanece no hospital. "
             f"Sugestão: ≥ {min_veiculos} veículos ou capacidade ≥ "
             f"{(total + num_veiculos - 1) // num_veiculos} kits/veículo."
         )
@@ -523,6 +525,302 @@ def montar_entregas_por_tipo(path: List[Cidade]) -> str:
             linhas.append("  (nenhuma)")
         linhas.append("")
     return "\n".join(linhas).strip()
+
+
+def montar_texto_remanescentes_hospital(remanescentes: List[Cidade]) -> str:
+    """Descreve kits/unidades que permanecem no hospital por falta de capacidade."""
+    if not remanescentes:
+        return (
+            "Nenhum kit remanescente no hospital — toda a demanda do dia "
+            "coube na capacidade da frota."
+        )
+
+    kits_total = sum(ga.city_demands.get(c, 0) for c in remanescentes)
+    ordenados = sorted(
+        remanescentes,
+        key=lambda c: (-ga.city_priorities.get(c, 0), obter_nome(c)),
+    )
+    linhas = [
+        "KITS REMANESCENTES NO HOSPITAL CENTRAL",
+        "(capacidade da frota insuficiente — entregas de menor prioridade "
+        "permanecem no depósito para o próximo turno)",
+        "",
+        f"Unidades afetadas: {len(remanescentes)} | Kits no hospital: {kits_total}",
+        "",
+    ]
+    for cidade in ordenados:
+        linhas.append(f"  • {formatar_entrega(cidade)}")
+    return "\n".join(linhas)
+
+
+def _alocar_best_fit(
+    entregues: List[Cidade],
+    num_veiculos: int,
+    capacidade_veiculo: int,
+    alocacao_hint: Dict[Cidade, int],
+    ordem_global: Dict[Cidade, int],
+) -> Tuple[Dict[Cidade, int], List[int]]:
+    """Aloca entregas com best-fit (menor slack após inserção)."""
+    carga_veiculo = [0] * num_veiculos
+    alocacao_efetiva: Dict[Cidade, int] = {}
+
+    ordenados = sorted(
+        entregues,
+        key=lambda c: (
+            -ga.city_demands.get(c, 0),
+            -ga.city_priorities.get(c, 0),
+            ordem_global[c],
+        ),
+    )
+
+    for cidade in ordenados:
+        demanda = ga.city_demands.get(cidade, 0)
+        veiculo_pref = alocacao_hint.get(cidade, 0)
+        opcoes = []
+        for veiculo in range(num_veiculos):
+            if carga_veiculo[veiculo] + demanda <= capacidade_veiculo:
+                slack_apos = capacidade_veiculo - carga_veiculo[veiculo] - demanda
+                pref = 0 if veiculo == veiculo_pref else 1
+                opcoes.append((slack_apos, pref, veiculo))
+        if not opcoes:
+            continue
+        opcoes.sort()
+        veiculo = opcoes[0][2]
+        alocacao_efetiva[cidade] = veiculo
+        carga_veiculo[veiculo] += demanda
+
+    return alocacao_efetiva, carga_veiculo
+
+
+def _preencher_slack_veiculos(
+    remanescentes: List[Cidade],
+    alocacao_efetiva: Dict[Cidade, int],
+    carga_veiculo: List[int],
+    num_veiculos: int,
+    capacidade_veiculo: int,
+    alocacao_hint: Dict[Cidade, int],
+    ordem_global: Dict[Cidade, int],
+) -> Tuple[Dict[Cidade, int], List[int]]:
+    """Preenche slack dos veículos com remanescentes de maior prioridade que couberem."""
+    pendentes = list(remanescentes)
+
+    while pendentes:
+        ordenados = sorted(
+            pendentes,
+            key=lambda c: (-ga.city_priorities.get(c, 0), ordem_global[c]),
+        )
+        alocado = False
+        for cidade in ordenados:
+            demanda = ga.city_demands.get(cidade, 0)
+            veiculo_pref = alocacao_hint.get(cidade, 0)
+            opcoes = []
+            for veiculo in range(num_veiculos):
+                if carga_veiculo[veiculo] + demanda <= capacidade_veiculo:
+                    slack_apos = capacidade_veiculo - carga_veiculo[veiculo] - demanda
+                    pref = 0 if veiculo == veiculo_pref else 1
+                    opcoes.append((slack_apos, pref, veiculo))
+            if not opcoes:
+                continue
+            opcoes.sort()
+            veiculo = opcoes[0][2]
+            alocacao_efetiva[cidade] = veiculo
+            carga_veiculo[veiculo] += demanda
+            pendentes.remove(cidade)
+            alocado = True
+            break
+        if not alocado:
+            break
+
+    return alocacao_efetiva, carga_veiculo
+
+
+def _verificar_utilizacao_maxima(
+    remanescentes: List[Cidade],
+    carga_veiculo: List[int],
+    capacidade_veiculo: int,
+) -> bool:
+    """True se nenhum remanescente cabe no slack de veículos em operação."""
+    for carga in carga_veiculo:
+        if carga == 0:
+            continue
+        slack = capacidade_veiculo - carga
+        for cidade in remanescentes:
+            if ga.city_demands.get(cidade, 0) <= slack:
+                return False
+    return True
+
+
+def _montar_resultado_priorizacao(
+    path: List[Cidade],
+    alocacao_efetiva: Dict[Cidade, int],
+    num_veiculos: int,
+    carga_veiculo: List[int],
+    utilizacao_maxima: bool,
+) -> Dict:
+    from genetic_algorithm import dividir_rota_em_veiculos
+
+    path_efetivo = [c for c in path if c in alocacao_efetiva]
+    remanescentes = [c for c in path if c not in alocacao_efetiva]
+    rotas_efetivas = dividir_rota_em_veiculos(
+        path_efetivo, alocacao_efetiva, num_veiculos
+    )
+    kits_entregues = sum(ga.city_demands.get(c, 0) for c in path_efetivo)
+    kits_hospital = sum(ga.city_demands.get(c, 0) for c in remanescentes)
+
+    return {
+        "path_efetivo": path_efetivo,
+        "alocacao_efetiva": alocacao_efetiva,
+        "rotas_efetivas": rotas_efetivas,
+        "remanescentes": remanescentes,
+        "texto_remanescentes": montar_texto_remanescentes_hospital(remanescentes),
+        "houve_corte": len(remanescentes) > 0,
+        "kits_entregues": kits_entregues,
+        "kits_hospital": kits_hospital,
+        "entregas_efetivas": len(path_efetivo),
+        "carga_por_veiculo": carga_veiculo,
+        "utilizacao_maxima": utilizacao_maxima,
+    }
+
+
+def _priorizar_modo_corte(
+    path: List[Cidade],
+    alocacao: Dict[Cidade, int],
+    num_veiculos: int,
+    capacidade_veiculo: int,
+    ordem_global: Dict[Cidade, int],
+    capacidade_frota: int,
+) -> Dict:
+    """Seleciona por prioridade, empacota com best-fit e preenche slack."""
+    candidatos = sorted(
+        path,
+        key=lambda c: (-ga.city_priorities.get(c, 0), ordem_global[c]),
+    )
+
+    selecionados: List[Cidade] = []
+    carga_acumulada = 0
+    for cidade in candidatos:
+        demanda = ga.city_demands.get(cidade, 0)
+        if demanda > capacidade_veiculo:
+            continue
+        if carga_acumulada + demanda <= capacidade_frota:
+            selecionados.append(cidade)
+            carga_acumulada += demanda
+
+    remanescentes_inicial = [c for c in path if c not in selecionados]
+
+    alocacao_efetiva, carga_veiculo = _alocar_best_fit(
+        selecionados,
+        num_veiculos,
+        capacidade_veiculo,
+        alocacao,
+        ordem_global,
+    )
+
+    nao_alocados = [c for c in selecionados if c not in alocacao_efetiva]
+    remanescentes = remanescentes_inicial + nao_alocados
+
+    alocacao_efetiva, carga_veiculo = _preencher_slack_veiculos(
+        remanescentes,
+        alocacao_efetiva,
+        carga_veiculo,
+        num_veiculos,
+        capacidade_veiculo,
+        alocacao,
+        ordem_global,
+    )
+
+    remanescentes_final = [c for c in path if c not in alocacao_efetiva]
+    utilizacao_maxima = _verificar_utilizacao_maxima(
+        remanescentes_final, carga_veiculo, capacidade_veiculo
+    )
+
+    return _montar_resultado_priorizacao(
+        path, alocacao_efetiva, num_veiculos, carga_veiculo, utilizacao_maxima
+    )
+
+
+def _priorizar_modo_normal(
+    path: List[Cidade],
+    alocacao: Dict[Cidade, int],
+    num_veiculos: int,
+    capacidade_veiculo: int,
+    ordem_global: Dict[Cidade, int],
+    capacidade_frota: int,
+) -> Dict:
+    """First-fit simples quando toda a demanda cabe na frota."""
+    capacidade_frota_restante = capacidade_frota
+    carga_veiculo = [0] * num_veiculos
+    alocacao_efetiva: Dict[Cidade, int] = {}
+
+    candidatos = sorted(
+        path,
+        key=lambda c: (-ga.city_priorities.get(c, 0), ordem_global[c]),
+    )
+
+    for cidade in candidatos:
+        demanda = ga.city_demands.get(cidade, 0)
+        if demanda > capacidade_frota_restante:
+            continue
+
+        veiculo_pref = alocacao.get(cidade, 0)
+        veiculos_tentativa = [veiculo_pref] + [
+            v for v in range(num_veiculos) if v != veiculo_pref
+        ]
+        for veiculo in veiculos_tentativa:
+            if carga_veiculo[veiculo] + demanda <= capacidade_veiculo:
+                carga_veiculo[veiculo] += demanda
+                capacidade_frota_restante -= demanda
+                alocacao_efetiva[cidade] = veiculo
+                break
+
+    return _montar_resultado_priorizacao(
+        path, alocacao_efetiva, num_veiculos, carga_veiculo, False
+    )
+
+
+def priorizar_entregas_capacidade(
+    path: List[Cidade],
+    alocacao: Dict[Cidade, int],
+    num_veiculos: int,
+    capacidade_veiculo: int,
+) -> Dict:
+    """
+    Garante que nenhum veículo exceda a capacidade.
+
+    Entregas de menor prioridade (desempate: ordem global do AG) ficam no hospital.
+    Quando a demanda total excede a frota, cada veículo em operação é carregado
+    ao máximo possível (best-fit + preenchimento de slack) antes de deixar kits
+    remanescentes no hospital.
+    """
+    if not path:
+        return {
+            "path_efetivo": [],
+            "alocacao_efetiva": {},
+            "rotas_efetivas": [[] for _ in range(num_veiculos)],
+            "remanescentes": [],
+            "texto_remanescentes": montar_texto_remanescentes_hospital([]),
+            "houve_corte": False,
+            "kits_entregues": 0,
+            "kits_hospital": 0,
+            "entregas_efetivas": 0,
+            "carga_por_veiculo": [0] * num_veiculos,
+            "utilizacao_maxima": False,
+        }
+
+    ordem_global = {cidade: indice for indice, cidade in enumerate(path)}
+    capacidade_frota = num_veiculos * capacidade_veiculo
+    demanda_total = sum(ga.city_demands.get(c, 0) for c in path)
+
+    if demanda_total > capacidade_frota:
+        return _priorizar_modo_corte(
+            path, alocacao, num_veiculos, capacidade_veiculo,
+            ordem_global, capacidade_frota,
+        )
+
+    return _priorizar_modo_normal(
+        path, alocacao, num_veiculos, capacidade_veiculo,
+        ordem_global, capacidade_frota,
+    )
 
 
 def montar_ordem_global(

@@ -47,7 +47,7 @@ Média de prioridade nas 10 primeiras posições da rota: {media_top10:.1f}.
 
 4. Benchmark
 AG: {fitness_final:.0f} km | Aleatória: {distancia_aleatoria:.0f} km | Ótimo: {otimo}.
-{"Nota: ótimo não calculado (>7 entregas) — compare AG vs aleatória." if math.isnan(fitness_target_solution) else ""}
+{"Nota: ótimo não calculado (≥7 entregas) — compare AG vs aleatória." if math.isnan(fitness_target_solution) else ""}
 
 5. Conclusão
 Solução gerada pelo AG. {"Benchmark exato omitido por tamanho do problema." if math.isnan(fitness_target_solution) else "Verifique diferença para o ótimo acima."}
