@@ -75,7 +75,7 @@ def gerar_instrucoes_veiculo_local(
         paradas.append(texto)
 
     if not paradas:
-        return f"Veículo {num_veiculo}: sem entregas nesta execução."
+        return f"Veículo {num_veiculo}: permanece no hospital (sem entregas nesta execução)."
 
     prioridades = [(i, _prioridade_da_parada(p), _nome_da_parada(p)) for i, p in enumerate(paradas, 1)]
     urgentes = sorted(
@@ -135,12 +135,51 @@ def responder_medicamentos_local(texto_entregas_por_tipo: str) -> Optional[str]:
     )
 
 
+def pergunta_sobre_remanescentes_hospital(pergunta: str) -> bool:
+    p = pergunta.lower()
+    return any(
+        k in p
+        for k in (
+            "hospital",
+            "remanescente",
+            "ficou no",
+            "ficaram no",
+            "não saiu",
+            "nao saiu",
+            "pendente",
+            "pendentes",
+            "aguardando",
+            "não coube",
+            "nao coube",
+            "excedente",
+        )
+    )
+
+
+def responder_remanescentes_local(texto_remanescentes: str) -> Optional[str]:
+    if not texto_remanescentes.strip():
+        return None
+    if "Nenhum kit remanescente" in texto_remanescentes:
+        return texto_remanescentes
+    return (
+        "Kits que não couberam na frota permanecem no Hospital Central "
+        "(prioridade mais baixa aguarda próximo turno):\n\n"
+        f"{texto_remanescentes}"
+    )
+
+
 def tentar_resposta_local(
     pergunta: str,
     texto_veiculos: str,
     texto_rotas_detalhado: str,
     texto_entregas_por_tipo: str = "",
+    texto_remanescentes: str = "",
 ) -> Optional[str]:
+    if pergunta_sobre_remanescentes_hospital(pergunta):
+        resposta = responder_remanescentes_local(texto_remanescentes)
+        if resposta:
+            return resposta
+
     if pergunta_sobre_medicamentos_ou_tipos(pergunta):
         resposta = responder_medicamentos_local(texto_entregas_por_tipo)
         if resposta:

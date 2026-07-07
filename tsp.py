@@ -46,6 +46,7 @@ from dados_hospitalares import (
     obter_nome,
     obter_tipo,
     parse_pedidos_csv,
+    priorizar_entregas_capacidade,
     resumo_tipos,
 )
 from draw_functions import (
@@ -61,6 +62,12 @@ from groq_conteudo import gerar_conteudo_completo
 from groq_perguntas import responder_pergunta
 from config_ui import abrir_configuracao
 from dashboard_ui import abrir_dashboard
+from metricas_benchmark import (
+    MetricasComparativoMetodos,
+    calcular_distancias_heuristicas,
+    montar_bloco_analise_metricas,
+    motivo_omissao_benchmark,
+)
 CORES_VEICULOS = [
     (37, 99, 235),   # V1 azul
     (220, 38, 38),   # V2 vermelho
@@ -173,6 +180,30 @@ best_fitness_values = []
 estado_simulacao = {"running": True}
 
 
+def _encerrar_pygame_com_rotas_finais(rotas, remanescentes=None):
+    """Último frame: rotas efetivas pós-priorização; encerra Pygame antes do pós-processamento."""
+    pygame.display.set_caption("TSP Logística — Rotas finais")
+    desenhar_fundo_paineis(screen, PLOT_WIDTH, MAP_X, HEIGHT, MAP_WIDTH)
+    if plot_surface is not None:
+        screen.blit(plot_surface, (0, 0))
+    rem_set = set(remanescentes) if remanescentes else None
+    draw_mapa_projecao(
+        screen,
+        projecao_mapa,
+        cities_locations,
+        DEPOT,
+        rotas,
+        CORES_VEICULOS,
+        NODE_RADIUS,
+        remanescentes=rem_set,
+    )
+    pygame.display.flip()
+    for _ in range(3):
+        pygame.event.pump()
+        pygame.time.wait(100)
+    pygame.quit()
+
+
 def callback_pygame(generation, best_individual, best_fitness):
     global plot_surface
 
@@ -247,11 +278,39 @@ best_path = resultado_ag["path"]
 best_alocacao = resultado_ag["alocacao"]
 fitness_final_prioridade = resultado_ag["fitness_final_prioridade"]
 
+resultado_cap = priorizar_entregas_capacidade(
+    best_path,
+    best_alocacao,
+    num_veiculos,
+    capacidade_veiculo,
+)
+best_path = resultado_cap["path_efetivo"]
+best_alocacao = resultado_cap["alocacao_efetiva"]
+texto_remanescentes = resultado_cap["texto_remanescentes"]
+houve_corte_capacidade = resultado_cap["houve_corte"]
+kits_remanescentes_hospital = resultado_cap["kits_hospital"]
+entregas_remanescentes = len(resultado_cap["remanescentes"])
+total_pedidos_dia = len(cities_locations)
+
+if houve_corte_capacidade:
+    print("\nCAPACIDADE INSUFICIENTE — PRIORIZAÇÃO APLICADA")
+    print("-" * 50)
+    print(texto_remanescentes)
+
+rotas_veiculos = resultado_cap["rotas_efetivas"]
+_encerrar_pygame_com_rotas_finais(rotas_veiculos, resultado_cap["remanescentes"])
+
 print("Calculando benchmark VRP (força bruta)...")
 fitness_target_solution = calcular_solucao_otima_vrp(
     cities_locations,
     num_veiculos,
     LIMITE_CIDADES_BENCHMARK,
+)
+motivo_otimo_omitido = motivo_omissao_benchmark(
+    num_veiculos,
+    len(cities_locations),
+    LIMITE_CIDADES_BENCHMARK,
+    fitness_target_solution,
 )
 if not math.isnan(fitness_target_solution):
     print(
@@ -259,18 +318,18 @@ if not math.isnan(fitness_target_solution):
         f"{fitness_target_solution:.2f}"
     )
 else:
-    print(
-        f"Benchmark exato omitido: mais de {LIMITE_CIDADES_BENCHMARK} cidades "
-        f"(ordem + alocação)."
-    )
+    if motivo_otimo_omitido:
+        print(f"Benchmark exato omitido: {motivo_otimo_omitido}.")
+    else:
+        print(
+            f"Benchmark exato omitido: {LIMITE_CIDADES_BENCHMARK}+ entregas "
+            f"(limitação computacional da força bruta)."
+        )
 
 fitness_final = calcular_distancia_operacao(
     best_path, best_alocacao, num_veiculos
 )
 
-rotas_veiculos = dividir_rota_em_veiculos(
-    best_path, best_alocacao, num_veiculos
-)
 ordens_veiculos = [[] for _ in range(num_veiculos)]
 
 for indice, cidade in enumerate(best_path):
@@ -286,13 +345,15 @@ for indice, rota in enumerate(rotas_veiculos, start=1):
 
     carga = sum(city_demands[cidade] for cidade in rota)
     distancia = calculate_distance_only(rota) if rota else 0
-    capacidade_ok = carga <= capacidade_veiculo
+    capacidade_ok = True
     autonomia_ok = distancia <= distancia_maxima_veiculo
-    status = (
-        "operacionalmente viável"
-        if capacidade_ok and autonomia_ok
-        else "com restrição"
-    )
+
+    if not rota:
+        status = "permanece no hospital"
+    elif autonomia_ok:
+        status = "operacionalmente viável"
+    else:
+        status = "com restrição de autonomia"
 
     ordens = ordens_veiculos[indice - 1]
     amostra_ordens = ordens[:5]
@@ -314,16 +375,17 @@ for indice, rota in enumerate(rotas_veiculos, start=1):
         "status": status,
     })
 
+    parada_vazia = "N/A (veículo ocioso — permanece no hospital)"
     linha = (
         f"Veículo {indice} | {len(rota)} entregas | "
         f"carga {carga}/{capacidade_veiculo} | "
         f"distância {distancia:.0f}/{distancia_maxima_veiculo} | "
         f"status: {status}\n"
         f"  Primeira parada: "
-        f"{formatar_entrega(rota[0]) if rota else 'N/A'}\n"
+        f"{formatar_entrega(rota[0]) if rota else parada_vazia}\n"
         f"  Última parada: "
-        f"{formatar_entrega(rota[-1]) if rota else 'N/A'}\n"
-        f"  Sequência (início): {resumo_ordens}\n"
+        f"{formatar_entrega(rota[-1]) if rota else parada_vazia}\n"
+        f"  Sequência (início): {resumo_ordens if rota else '—'}\n"
     )
     texto_veiculos += linha
 
@@ -342,6 +404,13 @@ alocacao_aleatoria = gerar_alocacao_aleatoria(
 )
 distancia_aleatoria = calcular_distancia_operacao(
     rota_aleatoria, alocacao_aleatoria, num_veiculos
+)
+
+print("Calculando heurísticas de referência (vizinho próximo, greedy)...")
+distancia_vizinho, distancia_greedy = calcular_distancias_heuristicas(
+    cities_locations,
+    num_veiculos,
+    DEPOT,
 )
 
 # Calcula a melhoria percentual usando a mesma métrica do algoritmo:
@@ -378,6 +447,24 @@ melhoria_distancia = (
     / distancia_inicial
 ) * 100
 
+metricas_comparativo = MetricasComparativoMetodos(
+    fitness_inicial=fitness_inicial,
+    distancia_inicial=distancia_inicial,
+    fitness_final=fitness_final,
+    fitness_final_prioridade=fitness_final_prioridade,
+    melhoria_fitness_pct=melhoria_prioridade,
+    melhoria_distancia_pct=melhoria_distancia,
+    geracao_convergencia=geracao_convergencia,
+    distancia_aleatoria=distancia_aleatoria,
+    distancia_vizinho_proximo=distancia_vizinho,
+    distancia_greedy_prioridade=distancia_greedy,
+    fitness_target_solution=fitness_target_solution,
+    diferenca_benchmark_pct=diferenca_benchmark,
+    num_veiculos=num_veiculos,
+    total_entregas=len(cities_locations),
+    motivo_otimo_omitido=motivo_otimo_omitido,
+)
+
 print(
     f"Melhoria (fitness): "
     f"{melhoria_prioridade:.2f}%"
@@ -391,6 +478,8 @@ print(
 print(f"Solução ótima VRP:  {fitness_target_solution:.2f}" if not math.isnan(fitness_target_solution) else "Solução ótima VRP:  N/A")
 print(f"Diferença para ótimo: {diferenca_benchmark:.2f}%" if not math.isnan(diferenca_benchmark) else "Diferença para ótimo: N/A")
 print(f"Distância rota aleatória: {distancia_aleatoria:.2f}")
+print(f"Vizinho mais próximo:     {distancia_vizinho:.2f}")
+print(f"Greedy por prioridade:    {distancia_greedy:.2f}")
 print(
     f"Comparativo VRP -> AG: {fitness_final:.2f} | "
     f"Aleatória: {distancia_aleatoria:.2f} | "
@@ -399,14 +488,15 @@ print(
 
 print(f"Distância total da operação: {distancia_total_rota:.2f}")
 
-todos_viaveis = all(
-    v["capacidade_ok"] and v["autonomia_ok"]
-    for v in dados_veiculos
-)
+todos_viaveis = all(v["autonomia_ok"] for v in dados_veiculos)
 print(
-    "Todos os veículos respeitam capacidade e autonomia."
-    if todos_viaveis
-    else "Há veículo(s) com restrição de capacidade ou autonomia."
+    "Todos os veículos respeitam autonomia e capacidade (kits excedentes no hospital)."
+    if todos_viaveis and not houve_corte_capacidade
+    else (
+        "Há veículo(s) com restrição de autonomia."
+        if todos_viaveis is False
+        else "Capacidade priorizada — kits excedentes permanecem no hospital (ver relatório)."
+    )
 )
 print("\nTOP 10 CIDADES DA ROTA FINAL")
 print("-" * 50)
@@ -486,28 +576,37 @@ top10_resumo = ", ".join(
     f"{obter_nome(c)}[{obter_tipo(c)}](p{city_priorities[c]})"
     for i, c in enumerate(best_path[:10], start=1)
 )
+contagem_tipos_entregues = resumo_tipos(best_path)
 texto_catalogo_entregas = montar_catalogo_entregas(best_path, best_alocacao)
 texto_entregas_por_tipo = montar_entregas_por_tipo(best_path)
 texto_rota_resumo = (
-    f"Total: {len(rota_detalhada)} entregas | "
+    f"Pedidos do dia: {total_pedidos_dia} | Entregas efetivas: {len(rota_detalhada)} | "
     f"Distância total: {distancia_total_rota:.0f} | "
-    f"Carga total: {carga_total} {UNIDADE_MEDIDA_ABREV} | "
+    f"Carga em rota: {carga_total} {UNIDADE_MEDIDA_ABREV} | "
+    f"Kits no hospital: {kits_remanescentes_hospital} {UNIDADE_MEDIDA_ABREV} | "
     f"Veículos: {num_veiculos} | "
     f"Capacidade/veículo: {capacidade_veiculo} {UNIDADE_MEDIDA_ABREV} | "
     f"Autonomia/veículo: {distancia_maxima_veiculo} km | "
     f"Depósito: Hospital Central\n"
-    f"Tipos: CRITICO={contagem_tipos['CRITICO']} | "
-    f"REGULAR={contagem_tipos['REGULAR']} | "
-    f"INSUMO={contagem_tipos['INSUMO']}\n"
+    f"Tipos (entregues): CRITICO={contagem_tipos_entregues['CRITICO']} | "
+    f"REGULAR={contagem_tipos_entregues['REGULAR']} | "
+    f"INSUMO={contagem_tipos_entregues['INSUMO']}\n"
     f"Top 10: {top10_resumo}\n"
     f"Prioridade 10: {prioridade_10} | Prioridade 9-10: {prioridade_9_10}"
 )
+if houve_corte_capacidade:
+    texto_rota_resumo += (
+        f"\nPriorização: {entregas_remanescentes} unidade(s) com "
+        f"{kits_remanescentes_hospital} kits aguardam no hospital."
+    )
 
 texto_rotas_detalhado = (
     montar_ordem_global(best_path, best_alocacao)
     + "\n\n"
     + montar_rotas_por_veiculo(rotas_veiculos)
 )
+if houve_corte_capacidade:
+    texto_rotas_detalhado += "\n\n" + texto_remanescentes
 
 if geracao_convergencia is None:
     geracao_convergencia = resultado_ag["geracoes_executadas"]
@@ -525,17 +624,20 @@ texto_resumo_semanal = (
     f"replicada por 5 dias úteis (não é histórico real de operação).\n"
     f"Período projetado: 5 dias úteis simulados\n"
     f"Depósito: Hospital Central {DEPOT} (saída/retorno de todos os veículos)\n"
-    f"Entregas por dia: {len(rota_detalhada)} unidades hospitalares\n"
-    f"Entregas totais na semana (projetadas): {len(rota_detalhada) * 5}\n"
     f"Veículos na frota: {num_veiculos}\n"
     f"Capacidade por veículo: {capacidade_veiculo} {UNIDADE_MEDIDA_ABREV}\n"
     f"Autonomia por veículo: {distancia_maxima_veiculo} km\n"
-    f"Tipos por dia: CRITICO={contagem_tipos['CRITICO']} | "
+    f"Entregas por dia (efetivas): {len(rota_detalhada)} | Pedidos totais: {total_pedidos_dia}\n"
+    f"Kits remanescentes no hospital (por dia): {kits_remanescentes_hospital}\n"
+    f"Tipos entregues por dia: CRITICO={contagem_tipos_entregues['CRITICO']} | "
+    f"REGULAR={contagem_tipos_entregues['REGULAR']} | "
+    f"INSUMO={contagem_tipos_entregues['INSUMO']}\n"
+    f"Tipos pedidos (total): CRITICO={contagem_tipos['CRITICO']} | "
     f"REGULAR={contagem_tipos['REGULAR']} | "
     f"INSUMO={contagem_tipos['INSUMO']}\n"
-    f"Tipos na semana (projetados): CRITICO={contagem_tipos['CRITICO'] * 5} | "
-    f"REGULAR={contagem_tipos['REGULAR'] * 5} | "
-    f"INSUMO={contagem_tipos['INSUMO'] * 5}\n"
+    f"Tipos na semana (projetados — entregues): CRITICO={contagem_tipos_entregues['CRITICO'] * 5} | "
+    f"REGULAR={contagem_tipos_entregues['REGULAR'] * 5} | "
+    f"INSUMO={contagem_tipos_entregues['INSUMO'] * 5}\n"
     f"Distância média diária (com depósito): {fitness_final:.2f}\n"
     f"Distância total semanal projetada: {fitness_final * 5:.2f}\n"
     f"Carga média diária: {carga_total}\n"
@@ -572,6 +674,8 @@ conteudo_ia = gerar_conteudo_completo(
     distancia_aleatoria=distancia_aleatoria,
     texto_veiculos=texto_veiculos,
     texto_resumo_semanal=texto_resumo_semanal,
+    texto_remanescentes=texto_remanescentes,
+    houve_corte_capacidade=houve_corte_capacidade,
     capacidade_veiculo=capacidade_veiculo,
     distancia_maxima_veiculo=distancia_maxima_veiculo,
 )
@@ -646,12 +750,16 @@ with open("melhor_rota.txt", "w", encoding="utf-8") as arquivo:
     arquivo.write(
         f"Comparativo VRP -> AG: {fitness_final:.2f} | "
         f"Aleatória: {distancia_aleatoria:.2f} | "
+        f"Vizinho: {distancia_vizinho:.2f} | "
+        f"Greedy: {distancia_greedy:.2f} | "
         f"Ótimo: {otimo_txt}\n\n"
     )
 
-
-
-
+    arquivo.write("=" * 50 + "\n")
+    arquivo.write("MÉTRICAS COMPARATIVAS (MÉTODOS)\n")
+    arquivo.write("=" * 50 + "\n\n")
+    arquivo.write(montar_bloco_analise_metricas(metricas_comparativo))
+    arquivo.write("\n\n")
     arquivo.write("Melhor rota encontrada:\n")
 
     for indice, cidade in enumerate(best_path, start=1):
@@ -691,6 +799,13 @@ with open("melhor_rota.txt", "w", encoding="utf-8") as arquivo:
     arquivo.write("=" * 50 + "\n\n")
     arquivo.write(texto_veiculos)
 
+    if houve_corte_capacidade:
+        arquivo.write("\n\n")
+        arquivo.write("=" * 50 + "\n")
+        arquivo.write("KITS REMANESCENTES NO HOSPITAL\n")
+        arquivo.write("=" * 50 + "\n\n")
+        arquivo.write(texto_remanescentes)
+
     arquivo.write("\n\n")
     arquivo.write("=" * 50 + "\n")
     arquivo.write("ROTA DETALHADA\n")
@@ -720,11 +835,10 @@ def _responder_pergunta_chat(pergunta, historico_conversa=None):
         instrucoes,
         texto_catalogo_entregas=texto_catalogo_entregas,
         texto_entregas_por_tipo=texto_entregas_por_tipo,
+        texto_remanescentes=texto_remanescentes,
         historico_conversa=historico_conversa,
     )
 
-
-pygame.quit()
 
 abrir_dashboard(
     best_solution=best_path,
@@ -744,6 +858,9 @@ abrir_dashboard(
     city_names=city_names,
     city_types=city_types,
     num_veiculos=num_veiculos,
+    remanescentes=resultado_cap["remanescentes"],
+    houve_corte_capacidade=houve_corte_capacidade,
+    metricas_comparativo=metricas_comparativo,
 )
 
 sys.exit()

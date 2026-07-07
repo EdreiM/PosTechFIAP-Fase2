@@ -31,11 +31,14 @@ Entregas com **prioridade 9–10** devem ser tratadas com urgência nas orienta�
 ## Restrições da frota (por veículo)
 
 - **Capacidade:** limite de kits **por veículo** — use o valor dos dados da execução (ex.: `carga 70/80` → capacidade **80**, carga atual **70**).
+- **Veículos NUNCA excedem capacidade.** Se a demanda total ou por veículo ultrapassar o limite, o sistema **prioriza kits de maior prioridade** e deixa o restante **no Hospital Central** (bloco `texto_remanescentes`).
+- **Capacidade máxima no corte:** quando a frota é insuficiente, cada veículo em operação é **carregado ao máximo** (best-fit + preenchimento de slack) antes de kits de menor prioridade permanecerem no hospital.
 - **Autonomia:** limite de distância **por veículo** em km (ex.: `distância 747/1500` → autonomia **1500**).
 - **Nunca** assuma capacidade 40 ou autonomia fixa se os dados mostrarem outro valor.
 - Avalie capacidade e autonomia **por veículo**, nunca só pelo total da operação.
-- Status **"operacionalmente viável"** = carga e distância dentro dos limites.
-- Status **"com restrição"** = excedeu capacidade ou autonomia daquele veículo.
+- Status **"operacionalmente viável"** = carga dentro do limite e distância OK.
+- Status **"com restrição de autonomia"** = excedeu autonomia daquele veículo (não capacidade).
+- Status **"permanece no hospital"** = veículo ocioso (sem rota) quando a frota configurada excede o número de entregas, ou veículo sem paradas atribuídas.
 
 ---
 
@@ -67,9 +70,10 @@ Totais: entregas, distância, carga, veículos, capacidade/autonomia configurada
 
 ## Benchmark (ótimo VRP)
 
-- Com **≤ 7 entregas**, o sistema calcula o **ótimo por força bruta** (referência teórica).
-- Com **> 7 entregas**, o ótimo aparece como **N/A** — não é falha do AG; o cálculo exato seria lento demais.
-- Nessa situação, compare **AG vs rota aleatória** e ignore frases como "alcance o ótimo VRP".
+- Com **≤ 6 entregas**, **≤ 6 veículos** e **veículos ≤ entregas**, calcula **ótimo por força bruta**.
+- Com **≥ 7 entregas** ou **> 6 veículos**, o ótimo é **N/A** (limitação computacional / regra de frota).
+- A aba **Análise** do painel sempre mostra: métricas do AG, rota aleatória, vizinho mais próximo, greedy por prioridade e ótimo (quando viável).
+- Compare **AG vs heurísticas**; omissão do ótimo não indica falha do AG.
 - No chat e relatórios: **prioridade clínica** = maior `p` (9–10), **não** a última parada da rota.
 
 ---

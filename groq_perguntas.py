@@ -27,6 +27,7 @@ def responder_pergunta(
     instrucoes,
     texto_catalogo_entregas="",
     texto_entregas_por_tipo="",
+    texto_remanescentes="",
     historico_conversa: Optional[Sequence[Tuple[str, str]]] = None,
 ):
     historico = historico_conversa or []
@@ -36,6 +37,7 @@ def responder_pergunta(
         texto_veiculos,
         texto_rotas_detalhado,
         texto_entregas_por_tipo=texto_entregas_por_tipo,
+        texto_remanescentes=texto_remanescentes,
     )
     if resposta_local:
         return resposta_local
@@ -57,6 +59,10 @@ Você é um especialista em logística hospitalar (VRP com kits de medicamentos)
 === ENTREGAS POR TIPO DE MEDICAMENTO/INSUMO ===
 
 {texto_entregas_por_tipo}
+
+=== KITS REMANESCENTES NO HOSPITAL ===
+
+{texto_remanescentes if texto_remanescentes.strip() else "Nenhum — toda demanda coube na frota."}
 
 === VEÍCULOS (resumo operacional) ===
 
@@ -101,7 +107,9 @@ Regras do chat:
 - Nunca diga "ajuste a rota" — a ordem do AG é oficial.
 - Capacidade/autonomia sempre por veículo, usando os números ATUAL/MAX dos dados.
 - MEDICAMENTOS / TIPOS: o sistema NÃO possui nomes de fármacos (ex.: dipirona). Use sempre o campo Tipo: CRITICO (medicamentos críticos), REGULAR (rotineiros) ou INSUMO (materiais). Cite unidade + tipo + kits quando listar entregas.
+- CAPACIDADE: veículos NUNCA excedem capacidade. Kits excedentes ficam no hospital (bloco KITS REMANESCENTES) — prioridade mais baixa aguarda próximo turno.
 - Se perguntarem "quais medicamentos" → responda com as categorias CRITICO/REGULAR/INSUMO e liste unidades do bloco ENTREGAS POR TIPO.
+- Se perguntarem o que ficou no hospital → use o bloco KITS REMANESCENTES.
 - Se não houver dado: "Essa informação não está disponível nos resultados atuais."
 
 Pergunta atual:

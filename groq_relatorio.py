@@ -15,6 +15,7 @@ def _fallback_relatorio(
     num_veiculos,
     distancia_aleatoria,
     fitness_target_solution,
+    texto_remanescentes="",
 ):
     diff_otimo = (
         f"{diferenca_benchmark:.2f}%"
@@ -46,8 +47,11 @@ Ver distância por veículo acima (limite configurado na simulação).
 Média nas 10 primeiras posições: {media_top10:.1f}.
 Diferença para ótimo VRP: {diff_otimo}.
 
-6. Recomendações
-Manter monitoramento de veículos com status "com restrição".
+6. Kits remanescentes no hospital
+{texto_remanescentes if texto_remanescentes.strip() else "Nenhum kit remanescente — frota absorveu toda a demanda."}
+
+7. Recomendações
+Informar unidades com kits pendentes no hospital; avaliar reforço de frota se remanescentes forem críticos.
 Relatório gerado localmente — IA Groq indisponível no momento.
 """
 

@@ -1,11 +1,113 @@
 # -*- coding: utf-8 -*-
+import math
 import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 import pygame
-from typing import List, Tuple
+from typing import List, Optional, Set, Tuple
 
 matplotlib.use("Agg")
+
+
+def indices_veiculos_ociosos(rotas: List[List]) -> List[int]:
+    """Índices de veículos sem entregas na execução."""
+    return [i for i, rota in enumerate(rotas) if not rota]
+
+
+def posicoes_marcadores_veiculos_ociosos(
+    depot_xy: Tuple[float, float],
+    num_ociosos: int,
+    raio_orbita: float = 28,
+) -> List[Tuple[int, int]]:
+    """Posições em arco semicircular abaixo do depósito (H)."""
+    if num_ociosos <= 0:
+        return []
+
+    dx, dy = depot_xy
+    if num_ociosos == 1:
+        angulos = [math.pi / 2]
+    else:
+        inicio = math.radians(35)
+        fim = math.radians(145)
+        angulos = [
+            inicio + (fim - inicio) * i / (num_ociosos - 1)
+            for i in range(num_ociosos)
+        ]
+
+    return [
+        (int(dx + raio_orbita * math.cos(a)), int(dy + raio_orbita * math.sin(a)))
+        for a in angulos
+    ]
+
+
+def montar_legenda_veiculos(
+    rotas: List[List],
+    nomes_cores: List[str],
+) -> str:
+    """Texto da legenda separando veículos em rota e ociosos no hospital."""
+    ativos = [i for i, rota in enumerate(rotas) if rota]
+    ociosos = [i for i, rota in enumerate(rotas) if not rota]
+    partes = []
+    if ativos:
+        partes.append(
+            "Em rota: " + ", ".join(nomes_cores[i] for i in ativos)
+        )
+    if ociosos:
+        partes.append(
+            "No hospital: "
+            + ", ".join(f"{nomes_cores[i]} (ocioso)" for i in ociosos)
+        )
+    return " | ".join(partes)
+
+
+def _posicao_label_trecho(
+    p0: Tuple[int, int],
+    p1: Tuple[int, int],
+    offset: float = 14,
+) -> Tuple[int, int]:
+    """Ponto ao longo do trecho p0→p1 para label do veículo."""
+    dx = p1[0] - p0[0]
+    dy = p1[1] - p0[1]
+    dist = math.hypot(dx, dy) or 1.0
+    return (
+        int(p0[0] + dx * offset / dist),
+        int(p0[1] + dy * offset / dist),
+    )
+
+
+def _desenhar_label_veiculo_rota_pygame(
+    screen: pygame.Surface,
+    x: int,
+    y: int,
+    cor: Tuple[int, int, int],
+    label: str,
+) -> None:
+    font = pygame.font.SysFont("Arial", 9, bold=True)
+    texto = font.render(label, True, cor)
+    fundo = pygame.Surface(
+        (texto.get_width() + 4, texto.get_height() + 2), pygame.SRCALPHA
+    )
+    fundo.fill((255, 255, 255, 200))
+    screen.blit(fundo, (x - 2, y - 1))
+    screen.blit(texto, (x, y))
+
+
+def _desenhar_marcador_veiculo_ocioso_pygame(
+    screen: pygame.Surface,
+    x: int,
+    y: int,
+    cor: Tuple[int, int, int],
+    label: str,
+    raio: int = 7,
+) -> None:
+    pygame.draw.circle(screen, cor, (x, y), raio)
+    pygame.draw.circle(screen, (203, 213, 225), (x, y), raio, width=1)
+    font = pygame.font.SysFont("Arial", 8, bold=True)
+    texto = font.render(label, True, (255, 255, 255))
+    screen.blit(
+        texto,
+        (x - texto.get_width() // 2, y - texto.get_height() // 2),
+    )
 
 
 class ProjecaoMapa:
@@ -113,18 +215,12 @@ def draw_mapa_projecao(
     rotas: List[List[Tuple[int, int]]],
     cores_veiculos: List[Tuple[int, int, int]],
     node_radius: int = 10,
+    remanescentes: Optional[Set[Tuple[int, int]]] = None,
 ) -> None:
-    """Desenha depósito, cidades e rotas no painel direito (coordenadas projetadas)."""
+    """Desenha depósito, cidades, rotas, labels V{n} e marcadores ociosos."""
     dx, dy = proj.projeta(depot)
     raio_depot = node_radius + 4
-    pygame.draw.circle(screen, (22, 101, 52), (dx, dy), raio_depot)
-    pygame.draw.circle(screen, (255, 255, 255), (dx, dy), raio_depot, width=2)
-    font = pygame.font.SysFont("Arial", 12, bold=True)
-    label = font.render("H", True, (255, 255, 255))
-    screen.blit(
-        label,
-        (dx - label.get_width() // 2, dy - label.get_height() // 2),
-    )
+    remanescentes_set = remanescentes or set()
 
     for indice, rota in enumerate(rotas):
         if not rota:
@@ -135,8 +231,38 @@ def draw_mapa_projecao(
         pontos.append(proj.projeta(depot))
         if len(pontos) >= 2:
             pygame.draw.lines(screen, cor, False, pontos, width=3)
+            if len(pontos) >= 2:
+                lx, ly = _posicao_label_trecho(pontos[0], pontos[1])
+                _desenhar_label_veiculo_rota_pygame(
+                    screen, lx, ly, cor, f"V{indice + 1}"
+                )
+
+    ociosos = indices_veiculos_ociosos(rotas)
+    posicoes = posicoes_marcadores_veiculos_ociosos((dx, dy), len(ociosos))
+    for pos, indice in zip(posicoes, ociosos):
+        cor = cores_veiculos[indice % len(cores_veiculos)]
+        _desenhar_marcador_veiculo_ocioso_pygame(
+            screen, pos[0], pos[1], cor, f"V{indice + 1}"
+        )
+
+    pygame.draw.circle(screen, (22, 101, 52), (dx, dy), raio_depot)
+    pygame.draw.circle(screen, (255, 255, 255), (dx, dy), raio_depot, width=2)
+    font = pygame.font.SysFont("Arial", 12, bold=True)
+    label = font.render("H", True, (255, 255, 255))
+    screen.blit(
+        label,
+        (dx - label.get_width() // 2, dy - label.get_height() // 2),
+    )
 
     for cidade in cities:
         cx, cy = proj.projeta(cidade)
-        pygame.draw.circle(screen, (239, 68, 68), (cx, cy), node_radius)
-        pygame.draw.circle(screen, (127, 29, 29), (cx, cy), node_radius, width=1)
+        if cidade in remanescentes_set:
+            pygame.draw.circle(screen, (148, 163, 184), (cx, cy), node_radius)
+            pygame.draw.circle(
+                screen, (100, 116, 139), (cx, cy), node_radius, width=1
+            )
+        else:
+            pygame.draw.circle(screen, (239, 68, 68), (cx, cy), node_radius)
+            pygame.draw.circle(
+                screen, (127, 29, 29), (cx, cy), node_radius, width=1
+            )

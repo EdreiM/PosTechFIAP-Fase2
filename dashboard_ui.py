@@ -1,6 +1,19 @@
 import threading
 import tkinter as tk
 from tkinter import scrolledtext, ttk
+from typing import Dict, List, Optional, Set, Tuple
+
+from draw_functions import (
+    indices_veiculos_ociosos,
+    montar_legenda_veiculos,
+    posicoes_marcadores_veiculos_ociosos,
+)
+from metricas_benchmark import (
+    MetricasComparativoMetodos,
+    montar_bloco_analise_metricas,
+)
+
+Cidade = Tuple[float, float]
 
 CORES_VEICULOS = [
     "#2563eb",  # V1
@@ -18,6 +31,36 @@ NOMES_CORES_VEICULOS = [
 ]
 
 
+def _metricas_legacy_para_bloco(
+    fitness_final: float,
+    distancia_aleatoria: float,
+    fitness_target_solution: float,
+    diferenca_benchmark: float,
+    geracao_convergencia: int,
+    motivo_otimo_omitido: str = "",
+    total_entregas: int = 0,
+    num_veiculos: int = 0,
+) -> MetricasComparativoMetodos:
+    """Compatibilidade quando só distâncias parciais são passadas."""
+    return MetricasComparativoMetodos(
+        fitness_inicial=float("nan"),
+        distancia_inicial=float("nan"),
+        fitness_final=fitness_final,
+        fitness_final_prioridade=float("nan"),
+        melhoria_fitness_pct=float("nan"),
+        melhoria_distancia_pct=float("nan"),
+        geracao_convergencia=geracao_convergencia,
+        distancia_aleatoria=distancia_aleatoria,
+        distancia_vizinho_proximo=float("nan"),
+        distancia_greedy_prioridade=float("nan"),
+        fitness_target_solution=fitness_target_solution,
+        diferenca_benchmark_pct=diferenca_benchmark,
+        num_veiculos=num_veiculos,
+        total_entregas=total_entregas,
+        motivo_otimo_omitido=motivo_otimo_omitido,
+    )
+
+
 def _criar_aba_texto(notebook, titulo, conteudo):
     frame = ttk.Frame(notebook)
     notebook.add(frame, text=titulo)
@@ -30,6 +73,46 @@ def _criar_aba_texto(notebook, titulo, conteudo):
     return frame
 
 
+def _estilo_no_mapa(
+    cidade: Cidade,
+    ordem_visita: Dict[Cidade, int],
+    remanescentes: Set[Cidade],
+    city_priorities: Dict[Cidade, int],
+    city_types: Optional[Dict[Cidade, str]] = None,
+) -> Dict:
+    """Estilo visual de um nó no mapa (função pura, testável sem Tkinter)."""
+    if cidade in remanescentes or cidade not in ordem_visita:
+        return {
+            "fill": "#94a3b8",
+            "outline": "#64748b",
+            "label": "—",
+            "raio": 10,
+            "text_color": "white",
+            "no_hospital": True,
+        }
+
+    prioridade = city_priorities.get(cidade, 1)
+    tipo = (city_types or {}).get(cidade, "")
+    if prioridade >= 9 or tipo == "CRITICO":
+        fill = "#b91c1c"
+        outline = "#7f1d1d"
+    elif tipo == "INSUMO":
+        fill = "#f97316"
+        outline = "#7f1d1d"
+    else:
+        fill = "#ef4444"
+        outline = "#7f1d1d"
+
+    return {
+        "fill": fill,
+        "outline": outline,
+        "label": str(ordem_visita[cidade]),
+        "raio": 12,
+        "text_color": "white",
+        "no_hospital": False,
+    }
+
+
 def _desenhar_rota(
     canvas,
     cities_locations,
@@ -39,14 +122,20 @@ def _desenhar_rota(
     depot=None,
     city_names=None,
     city_types=None,
+    remanescentes=None,
 ):
     canvas.delete("all")
 
-    if not cities_locations or not best_solution:
+    if not cities_locations:
         return
 
+    if best_solution is None:
+        best_solution = []
+
+    remanescentes_set: Set[Cidade] = set(remanescentes or [])
+
     if rotas_veiculos is None:
-        rotas_veiculos = [best_solution]
+        rotas_veiculos = [best_solution] if best_solution else []
 
     largura = canvas.winfo_width() or 700
     altura = canvas.winfo_height() or 400
@@ -114,6 +203,21 @@ def _desenhar_rota(
 
     if depot is not None:
         dx, dy = coords[depot]
+        ociosos = indices_veiculos_ociosos(rotas_veiculos)
+        posicoes = posicoes_marcadores_veiculos_ociosos((dx, dy), len(ociosos))
+        for pos, indice_veiculo in zip(posicoes, ociosos):
+            mx, my = pos
+            cor = cores_veiculos[indice_veiculo % len(cores_veiculos)]
+            raio_m = 9
+            canvas.create_oval(
+                mx - raio_m, my - raio_m, mx + raio_m, my + raio_m,
+                fill=cor, outline="#cbd5e1", width=1,
+            )
+            canvas.create_text(
+                mx, my, text=f"V{indice_veiculo + 1}", fill="white",
+                font=("Segoe UI", 7, "bold"),
+            )
+
         raio_depot = 16
         canvas.create_oval(
             dx - raio_depot, dy - raio_depot,
@@ -127,27 +231,28 @@ def _desenhar_rota(
 
     for cidade in cities_locations:
         x, y = coords[cidade]
-        prioridade = city_priorities.get(cidade, 1)
-        tipo = (city_types or {}).get(cidade, "")
-        if prioridade >= 9 or tipo == "CRITICO":
-            cor = "#b91c1c"
-        elif tipo == "INSUMO":
-            cor = "#f97316"
-        else:
-            cor = "#ef4444"
-        raio = 12
+        estilo = _estilo_no_mapa(
+            cidade,
+            ordem_visita,
+            remanescentes_set,
+            city_priorities,
+            city_types,
+        )
+        raio = estilo["raio"]
 
         canvas.create_oval(
             x - raio, y - raio, x + raio, y + raio,
-            fill=cor, outline="#7f1d1d", width=1,
+            fill=estilo["fill"],
+            outline=estilo["outline"],
+            width=2 if estilo["no_hospital"] else 1,
+            dash=(3, 2) if estilo["no_hospital"] else (),
         )
 
-        ordem = ordem_visita[cidade]
         canvas.create_text(
             x, y,
-            text=str(ordem),
-            fill="white",
-            font=("Segoe UI", 9, "bold"),
+            text=estilo["label"],
+            fill=estilo["text_color"],
+            font=("Segoe UI", 8 if estilo["no_hospital"] else 9, "bold"),
         )
 
 
@@ -169,6 +274,15 @@ def abrir_dashboard(
     city_names=None,
     city_types=None,
     num_veiculos=None,
+    remanescentes=None,
+    houve_corte_capacidade=False,
+    metricas_comparativo: Optional[MetricasComparativoMetodos] = None,
+    distancia_aleatoria=float("nan"),
+    fitness_target_solution=float("nan"),
+    diferenca_benchmark=float("nan"),
+    geracao_convergencia=0,
+    total_entregas=0,
+    motivo_otimo_omitido="",
 ):
     root = tk.Tk()
     root.title("TSP Logística — Painel Operacional")
@@ -219,32 +333,57 @@ def abrir_dashboard(
             depot,
             city_names,
             city_types,
+            remanescentes=remanescentes,
         )
 
     canvas.bind("<Configure>", redesenhar)
     root.after(100, redesenhar)
 
-    n_veiculos = num_veiculos or (
-        len(rotas_veiculos) if rotas_veiculos else 0
+    legenda_veiculos = montar_legenda_veiculos(
+        rotas_veiculos or [], NOMES_CORES_VEICULOS
     )
-    legenda_veiculos = " | ".join(
-        NOMES_CORES_VEICULOS[i]
-        for i in range(n_veiculos)
-    )
+    n_entregues = len(best_solution) if best_solution else 0
+    n_pedidos = len(cities_locations)
+    legenda_partes = [
+        f"Distância total: {fitness_final:.2f}",
+        f"H = Hospital",
+        f"Número = ordem global ({n_entregues}/{n_pedidos} entregas)",
+        legenda_veiculos,
+        "Marcador colorido perto do H = veículo ocioso (sem rota)",
+        "Vermelho escuro = CRITICO",
+        "Laranja = INSUMO",
+    ]
+    if houve_corte_capacidade or (remanescentes and len(remanescentes) > 0):
+        legenda_partes.append("Cinza tracejado = aguardando no hospital")
     legenda = ttk.Label(
         aba_rota,
-        text=f"Distância total: {fitness_final:.2f}  |  "
-             f"H = Hospital  |  "
-             f"Número no nó = ordem global  |  "
-             f"Linhas: {legenda_veiculos}  |  "
-             f"Vermelho escuro = CRITICO  |  "
-             f"Laranja = INSUMO",
+        text="  |  ".join(legenda_partes),
         font=("Segoe UI", 9),
+        wraplength=860,
+        justify=tk.CENTER,
     )
     legenda.pack(pady=(0, 8))
 
     _criar_aba_texto(notebook, "Veículos", texto_veiculos)
-    _criar_aba_texto(notebook, "Análise", analise)
+
+    bloco_benchmark = montar_bloco_analise_metricas(
+        metricas_comparativo
+        if metricas_comparativo is not None
+        else _metricas_legacy_para_bloco(
+            fitness_final=fitness_final,
+            distancia_aleatoria=distancia_aleatoria,
+            fitness_target_solution=fitness_target_solution,
+            diferenca_benchmark=diferenca_benchmark,
+            geracao_convergencia=geracao_convergencia,
+            motivo_otimo_omitido=motivo_otimo_omitido,
+            total_entregas=total_entregas,
+            num_veiculos=num_veiculos or 0,
+        )
+    )
+    conteudo_analise = (
+        f"{bloco_benchmark}\n\n{'─' * 40}\n\nANÁLISE TÉCNICA (IA)\n\n{analise}"
+    )
+    _criar_aba_texto(notebook, "Análise", conteudo_analise)
     _criar_aba_texto(notebook, "Relatório Diário", relatorio)
     _criar_aba_texto(notebook, "Relatório Semanal", relatorio_semanal)
     _criar_aba_texto(notebook, "Instruções", instrucoes)

@@ -172,7 +172,7 @@ def main():
         resultados.append(otimo)
     else:
         print(
-            f"  Ótimo omitido: mais de {LIMITE_CIDADES_BENCHMARK} cidades."
+            f"  Ótimo omitido: {LIMITE_CIDADES_BENCHMARK}+ entregas (força bruta)."
         )
 
     print("\n" + "=" * 70)

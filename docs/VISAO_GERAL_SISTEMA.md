@@ -35,7 +35,9 @@ config.py + dados_hospitalares (demandas fixas ou CSV)
                     ↓
               Convergência (ou limite de gerações)
                     ↓
-              Benchmark VRP (se ≤ 7 cidades) + métricas finais
+              priorizar_entregas_capacidade() — kits excedentes ficam no hospital
+                    ↓
+              Benchmark VRP (≤ 6 entregas) + heurísticas + métricas finais
                     ↓
               Divisão por veículo + relatórios numéricos
                     ↓
@@ -79,10 +81,10 @@ Abre **antes** do Pygame quando você roda `python tsp.py`:
 | Demandas (modo fixo) | Tabela fixa em `dados_hospitalares.py` (kits por unidade) |
 | Capacidade / autonomia | 40/60/80 kits · 1200/1500/2000 km |
 | Importar CSV | `exemplos/pedidos_exemplo.csv` |
-| Quantidade de veículos | 2–8 (não pode exceder entregas) |
+| Quantidade de veículos | 2–8 (excedentes permanecem no hospital) |
 | Cenário diferente | Seed aleatória a cada execução |
 | Iniciar simulação | Resumo dos pedidos → confirma → Pygame + AG |
-| Viabilidade | `avaliar_viabilidade_frota()` — alerta se kits > frota |
+| Viabilidade | `avaliar_viabilidade_frota()` — alerta se kits > frota; excedente vai para o hospital |
 | Iniciar com padrão (config.py) | Carrega `N_CIDADES`, `NUM_VEICULOS`, `MODO_CIDADES` e `SEED` |
 
 Scripts `benchmark_comparativo.py` e `experimentos_ag.py` **não** usam esta janela — leem só `config.py`.
@@ -101,7 +103,7 @@ Centraliza nomes, tipos e **demandas fixas (kits)** no modo fixo.
 | REGULAR | 4–7 | Farmácia: 18 | 10–25 kits |
 | INSUMO | 1–3 | Maternidade: 30 | 15–30 kits |
 
-**Funções principais:** `montar_entregas()`, `configurar_cenario()`, `parse_pedidos_csv()`, `avaliar_viabilidade_frota()`
+**Funções principais:** `montar_entregas()`, `configurar_cenario()`, `parse_pedidos_csv()`, `avaliar_viabilidade_frota()`, `priorizar_entregas_capacidade()`, `montar_texto_remanescentes_hospital()`
 
 ---
 
@@ -132,6 +134,7 @@ Centraliza nomes, tipos e **demandas fixas (kits)** no modo fixo.
 | Arquivo | Função |
 |---------|--------|
 | `heuristics.py` | Rota aleatória, vizinho mais próximo, greedy por prioridade |
+| `metricas_benchmark.py` | Métricas AG vs heurísticas vs ótimo (aba Análise + `melhor_rota.txt`) |
 | `benchmark_comparativo.py` | Compara AG vs todas as heurísticas |
 | `experimentos_ag.py` | 3 configs do AG + gráfico de convergência |
 
@@ -148,6 +151,7 @@ Ver [EVIDENCIAS_EXPERIMENTAIS.md](EVIDENCIAS_EXPERIMENTAIS.md) para uso no relat
 | `groq_utils.py` | Cliente, `.env`, fallback se API falhar |
 | `groq_conteudo.py` | **1 chamada** gera análise + relatórios + instruções |
 | `groq_perguntas.py` | Chat com histórico (últimos 6 turnos) |
+| `groq_respostas_locais.py` | Respostas locais (instruções, tipos de medicamento, remanescentes) |
 | `groq_analysis.py`, etc. | Fallbacks locais por módulo |
 
 Capacidade/autonomia nos prompts vêm dos **dados da execução** (ex.: 80 kits), não de valores fixos do `config.py`.
@@ -166,11 +170,16 @@ pytest tests/test_projeto.py -v
 |--------|-----------|
 | `TestConfig` | `config.py`, cidades fixo/aleatório |
 | `TestConfigUI` | Parâmetros padrão da janela |
-| `TestDadosHospitalares` | Nomes, kits fixos, CSV, viabilidade, relatórios |
+| `TestDadosHospitalares` | Nomes, kits fixos, CSV, viabilidade, priorização por capacidade |
 | `TestGeneticAlgorithm` | AG, VRP, depósito, crossover, fitness |
 | `TestAgRunner` | Execução do AG reutilizável |
 | `TestGroqUtils` | Fallback Groq, contexto IA, histórico do chat |
+| `TestGroqRespostasLocais` | Chat local: instruções, medicamentos, remanescentes no hospital |
+| `TestDashboardAnalise` | Bloco de métricas na aba Análise (ótimo, heurísticas, omissões) |
+| `TestMetricasBenchmark` | Heurísticas, motivo de omissão do ótimo, economia relativa |
 | `TestRegressaoBugsUsuario` | Cenário real 18 entregas — chat, abas IA, benchmark N/A |
+
+**84 testes** no total.
 
 ---
 
@@ -183,14 +192,16 @@ pytest tests/test_projeto.py -v
 - Tipos CRITICO / REGULAR / INSUMO
 - Múltiplos veículos com alocação evoluída
 - Capacidade e autonomia por veículo
+- **Priorização por capacidade:** kits excedentes permanecem no hospital (maior prioridade sai primeiro)
 - Comparativo AG vs heurísticas
 - 3 experimentos documentados do AG
 
 ### Limitações conhecidas
 
-- Benchmark exato **N/A** para 10+ cidades
+- Benchmark exato **N/A** com **≥ 7 entregas**, **> 6 veículos** ou veículos > entregas
 - Relatório semanal é **projeção** (5 dias simulados)
-- Restrições por **penalidade** (solução pode violar limites)
+- Durante o AG, restrições usam **penalidade** no fitness; na **saída operacional**, capacidade é **respeitada** via `priorizar_entregas_capacidade()`
+- Autonomia ainda pode gerar status "com restrição de autonomia" se a rota for longa demais
 
 ---
 

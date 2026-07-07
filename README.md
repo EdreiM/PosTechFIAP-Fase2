@@ -14,11 +14,12 @@ No **modo fixo**, demandas e prioridades por unidade são **tabelas fixas** (rep
 
 1. Otimiza rotas de entrega com Algoritmo Genético
 2. Considera **prioridades**, **capacidade (kits)**, **autonomia**, **depósito hospitalar** e **tipos de entrega** (CRITICO, REGULAR, INSUMO)
-3. Usa **nomes reais de unidades hospitalares** (UTI, Home Care, Farmácia, etc.)
-4. Exibe **resumo dos pedidos** antes de rodar (unidade · tipo · kits · prioridade)
-5. Simula a evolução em tempo real (Pygame)
-6. Gera **análise**, **relatórios**, **instruções** e **chat** com IA
-7. Abre painel operacional com abas (mapa com H = hospital, veículos, chat)
+3. **Prioriza kits de maior prioridade** quando a frota não comporta toda a demanda — o excedente **permanece no hospital** e é reportado
+4. Usa **nomes reais de unidades hospitalares** (UTI, Home Care, Farmácia, etc.)
+5. Exibe **resumo dos pedidos** antes de rodar (unidade · tipo · kits · prioridade)
+6. Simula a evolução em tempo real (Pygame)
+7. Gera **análise**, **relatórios**, **instruções** e **chat** com IA
+8. Abre painel operacional com abas (mapa com H = hospital, veículos, chat)
 
 ## Pré-requisitos
 
@@ -69,17 +70,18 @@ Configuração → Resumo dos pedidos → Pygame (AG) → Painel + IA
 |-------|--------|-----------|
 | **Modo de entregas** | `fixo` / `aleatorio` | Fixo usa unidades hospitalares pré-definidas; aleatório gera coordenadas |
 | **Quantidade de entregas** | Fixo: 5, 10, 12 ou 15 · Aleatório: 3–25 | Número de paradas na rota |
-| **Quantidade de veículos** | 2 a 8 | Frota disponível (não pode ser maior que entregas) |
+| **Quantidade de veículos** | 2 a 8 | Frota disponível; excedentes permanecem no hospital (sem rota) |
 | **Capacidade por veículo** | 40 / 60 / 80 kits | Limite de carga por van |
 | **Autonomia por veículo** | 1200 / 1500 / 2000 km | Distância máxima por rota |
 | **Importar CSV** | opcional | Pedidos do dia — ver [`exemplos/pedidos_exemplo.csv`](exemplos/pedidos_exemplo.csv) |
 | **Cenário diferente** | checkbox | Seed aleatória a cada execução |
+| **Benchmark — solução ótima** | painel dinâmico | Aviso se ótimo (força bruta) será omitido: **≥ 7 entregas** ou **> 6 veículos** |
 | **Iniciar simulação** | botão | Abre resumo dos pedidos → confirma → roda o AG |
 | **Iniciar com padrão (config.py)** | botão | Carrega valores padrão do arquivo |
 
 **Mesma rota sempre?** Com a mesma seed e os mesmos parâmetros, sim — resultado reprodutível. Marque **Cenário diferente** ou altere parâmetros para variar.
 
-**Viabilidade da frota:** o resumo avisa se a carga total (kits) excede `veículos × capacidade` — o AG ainda roda, mas veículos podem aparecer “com restrição”.
+**Viabilidade da frota:** o resumo avisa se a carga total (kits) excede `veículos × capacidade`. O AG roda normalmente; após a otimização, **entregas de menor prioridade permanecem no Hospital Central** (relatórios, chat e `melhor_rota.txt` listam os remanescentes). Veículos **nunca excedem capacidade** na operação efetiva. Quando a frota é insuficiente, **cada veículo em operação é carregado ao máximo** antes de deixar kits remanescentes no hospital.
 
 ### 2. Resumo dos pedidos (antes do AG)
 
@@ -91,13 +93,13 @@ Tabela com todos os pedidos do dia, carga total, capacidade da frota e aviso se 
 
 ![Simulação Pygame — convergência do AG e rotas por veículo](simulacao_pygame.png)
 
-Gráfico de fitness à esquerda; mapa com depósito **H** e rotas coloridas por veículo à direita. Pressione **Q** ou feche a janela para encerrar.
+Gráfico de fitness à esquerda; mapa com depósito **H**, rotas coloridas por veículo e marcadores **V{n}** para vans ociosas no hospital. Durante o AG o mapa evolui; o **último frame** exibe as rotas finais pós-priorização (igual ao dashboard), com label **V1**, **V4**, etc. nas linhas ativas. Pressione **Q** ou feche a janela para encerrar.
 
 ### 4. Painel operacional (após a simulação)
 
 ![Painel operacional — mapa, tipos de entrega e rotas por veículo](painel_operacional.png)
 
-Abas: mapa, veículos, análise, relatórios, instruções, convergência e chat. Resultados salvos em `melhor_rota.txt` (local, não vai para o Git).
+Abas: mapa, veículos, **análise** (métricas completas do AG + comparativo com aleatória, vizinho mais próximo, greedy e ótimo quando viável), relatórios, instruções, convergência e chat. No mapa, **nós numerados** = entregas efetivas; **nós cinza tracejados (—)** = kits que ficaram no hospital por falta de capacidade; **marcadores coloridos perto do H (V1, V2…)** = veículos ociosos sem rota nesta execução. Resultados salvos em `melhor_rota.txt` (local, não vai para o Git), incluindo o bloco completo de **métricas comparativas** (mesmo conteúdo da aba Análise).
 
 ### Pedidos via CSV (opcional)
 
@@ -126,17 +128,18 @@ pytest tests/test_projeto.py -v
 python tests/test_projeto.py
 ```
 
-**53 testes** em um único arquivo — config, AG/VRP, IA (Groq) e **regressão de bugs de demo**.
+**84 testes** em um único arquivo — config, AG/VRP, priorização de capacidade, mapa do dashboard, métricas comparativas, IA (Groq) e **regressão de bugs de demo**.
 
 ## Estrutura do projeto
 
 ```
 config.py              # Parâmetros padrão, unidade de carga, opções de frota
 config_ui.py           # Janela de config + resumo de pedidos
-dados_hospitalares.py  # Nomes, tipos, demandas fixas, CSV, viabilidade
+dados_hospitalares.py  # Nomes, tipos, demandas, CSV, viabilidade, priorização por capacidade
 genetic_algorithm.py   # AG, fitness VRP, restrições, depósito
 ag_runner.py           # Execução do AG (reutilizável)
 heuristics.py          # Heurísticas para comparativo
+metricas_benchmark.py  # Métricas AG vs heurísticas vs ótimo (aba Análise)
 benchmark_comparativo.py
 experimentos_ag.py
 tsp.py                 # Fluxo principal
@@ -148,7 +151,8 @@ groq_utils.py         # Cliente Groq, fallback e .env
 groq_*.py             # Módulos LLM (análise, relatórios, chat)
 docs/CONTEXTO_IA.md   # Contexto fixo para a IA (chat e relatórios)
 exemplos/              # CSV de exemplo
-tests/test_projeto.py  # Testes unitários (53) + validadores_ia.py
+groq_respostas_locais.py # Respostas locais (instruções, medicamentos, hospital)
+tests/test_projeto.py  # Testes unitários (58) + validadores_ia.py
 tests/validadores_ia.py # Regras de qualidade mínima das saídas de IA
 docs/
 results/               # Gerado localmente (gitignored)
@@ -170,6 +174,21 @@ Parâmetros técnicos e padrões da janela. Obrigatório para scripts de benchma
 | `DISTANCIA_MAXIMA_VEICULO` | 1500 | Autonomia km (padrão) |
 | `OPCOES_AUTONOMIA` | 1200, 1500, 2000 | Opções na janela |
 | `SEED` | 42 | Seed reprodutível |
+| `LIMITE_CIDADES_BENCHMARK` | 7 | A partir de 7 entregas, ótimo (força bruta) é omitido |
+
+### Métricas na aba Análise (painel)
+
+Após cada simulação, o painel exibe:
+
+| Grupo | Métricas |
+|-------|----------|
+| **AG** | Fitness inicial/final, distância inicial/final, melhoria %, geração de convergência |
+| **Comparativo (km)** | AG, rota aleatória, vizinho mais próximo, greedy por prioridade, ótimo VRP* |
+| **Relativo ao AG** | Economia em km e % vs cada método; diferença vs ótimo quando calculado |
+
+O mesmo bloco é gravado em `melhor_rota.txt` ao final de cada simulação (`python tsp.py`).
+
+\*Ótimo só com **≤ 6 entregas**, **≤ 6 veículos** e veículos ≤ entregas. Script completo: `python benchmark_comparativo.py`.
 
 ## Documentação adicional
 
@@ -193,7 +212,7 @@ Parâmetros técnicos e padrões da janela. Obrigatório para scripts de benchma
 | LLM: instruções, relatórios, melhorias | Implementado |
 | Chat em linguagem natural | Implementado |
 | Configuração interativa + resumo de pedidos | `config_ui.py` |
-| Testes automatizados | `tests/test_projeto.py` (53) |
+| Testes automatizados | `tests/test_projeto.py` (84) |
 | Documentação e diagrama | `docs/` |
 | Relatório técnico / vídeo demo | A entregar pelo grupo |
 
