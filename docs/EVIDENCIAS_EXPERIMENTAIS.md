@@ -80,7 +80,7 @@ Definidos em `dados_hospitalares.py` → `NOMES_POR_TAMANHO` (modo fixo):
 | **INSUMO** | Material hospitalar | 1–3 | Fixo: ex. Maternidade 30 · Aleatório: 15–30 |
 
 No **modo fixo**, valores exatos em `DEMANDAS_FIXAS_POR_TAMANHO` (`dados_hospitalares.py`) — reprodutíveis.  
-Demo interativa: capturas em `janela_configuracao.png`, `resumo_pedidos.png`, `simulacao_pygame.png`, `painel_operacional.png`.
+Demo interativa: capturas em `exemplos/janela_configuracao.png`, `exemplos/resumo_pedidos.png`, `exemplos/simulacao_pygame.png`, `exemplos/painel_operacional.png`.
 
 Configuração: `configurar_cenario()` ou CSV via `parse_pedidos_csv()`.
 

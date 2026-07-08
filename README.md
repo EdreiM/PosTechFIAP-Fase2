@@ -66,7 +66,7 @@ Configuração → Resumo dos pedidos → Pygame (AG) → Painel + IA
 
 ### 1. Janela de configuração
 
-![Janela de configuração — frota, kits, CSV](janela_configuracao.png)
+![Janela de configuração — frota, kits, CSV](exemplos/janela_configuracao.png)
 
 | Campo | Opções | Descrição |
 |-------|--------|-----------|
@@ -87,19 +87,19 @@ Configuração → Resumo dos pedidos → Pygame (AG) → Painel + IA
 
 ### 2. Resumo dos pedidos (antes do AG)
 
-![Resumo dos pedidos — unidade, tipo, kits, prioridade e capacidade da frota](resumo_pedidos.png)
+![Resumo dos pedidos — unidade, tipo, kits, prioridade e capacidade da frota](exemplos/resumo_pedidos.png)
 
 Tabela com todos os pedidos do dia, carga total, capacidade da frota e aviso se a frota é insuficiente.
 
 ### 3. Simulação Pygame (AG em tempo real)
 
-![Simulação Pygame — convergência do AG e rotas por veículo](simulacao_pygame.png)
+![Simulação Pygame — convergência do AG e rotas por veículo](exemplos/simulacao_pygame.png)
 
 Gráfico de fitness à esquerda; mapa com depósito **H**, rotas coloridas por veículo e marcadores **V{n}** para vans ociosas no hospital. Durante o AG o mapa evolui; o **último frame** exibe as rotas finais pós-priorização (igual ao dashboard), com label **V1**, **V4**, etc. nas linhas ativas. Pressione **Q** ou feche a janela para encerrar.
 
 ### 4. Painel operacional (após a simulação)
 
-![Painel operacional — mapa, tipos de entrega e rotas por veículo](painel_operacional.png)
+![Painel operacional — mapa, tipos de entrega e rotas por veículo](exemplos/painel_operacional.png)
 
 Abas: mapa, veículos, **análise** (métricas do AG + comparativo com aleatória, vizinho mais próximo, greedy e ótimo quando viável + interpretação da IA), relatórios diário/semanal, **guia motoristas** (rota passo a passo por veículo) e chat. O cabeçalho mostra apenas o título — sem bloco de resumo no topo. A **convergência** do AG aparece só na simulação **Pygame** (gráfico à esquerda), não no painel. No mapa, **nós numerados** = entregas efetivas; **nós cinza tracejados (—)** = kits que ficaram no hospital por falta de capacidade; **marcadores coloridos perto do H (V1, V2…)** = veículos ociosos sem rota nesta execução. Resultados salvos em `melhor_rota.txt` (local, não vai para o Git): rotas por veículo, remanescentes e bloco de **métricas comparativas** (mesmo conteúdo da aba Análise).
 
@@ -154,7 +154,7 @@ groq_contexto.py       # Carrega docs/CONTEXTO_IA.md nos prompts
 groq_utils.py          # Cliente Groq, fallback e .env
 groq_respostas_locais.py # Respostas locais do chat
 groq_*.py              # Fallbacks por módulo
-exemplos/              # CSV de exemplo
+exemplos/              # CSV de exemplo + capturas de tela do fluxo
 tests/                 # Suite de testes (ver tests/README.md)
 docs/
   VISAO_GERAL_SISTEMA.md   # Visão do sistema para a equipe
