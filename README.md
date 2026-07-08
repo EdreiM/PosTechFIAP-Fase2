@@ -21,6 +21,98 @@ No **modo fixo**, demandas e prioridades por unidade são **tabelas fixas** (rep
 7. Gera **análise**, **relatórios**, **guia motoristas** e **chat**
 8. Abre painel operacional com 7 abas (mapa, veículos, análise, relatórios, guia motoristas, chat)
 
+## Arquitetura
+
+Fluxo principal do sistema:
+
+```mermaid
+flowchart TB
+    subgraph entrada [Entrada e configuracao]
+        ConfigUI[config_ui.py]
+        Config[config.py]
+        DadosH[dados_hospitalares.py]
+    end
+
+    subgraph orquestracao [Orquestracao tsp.py]
+        TSP[tsp.py]
+        Priorizar[priorizar_entregas_capacidade]
+        Metricas[metricas_benchmark.py]
+    end
+
+    subgraph ag [Algoritmo Genetico]
+        Runner[ag_runner.py]
+        GA[genetic_algorithm.py]
+    end
+
+    subgraph visual [Visualizacao]
+        Pygame[Pygame fitness e mapa]
+        Dashboard[dashboard_ui.py 7 abas]
+    end
+
+    subgraph ia [IA e motoristas]
+        ContextoMD[CONTEXTO_IA.md]
+        ContextoPy[groq_contexto.py]
+        Conteudo[groq_conteudo.py]
+        Rotas[groq_rotas.py Guia Motoristas]
+        Perguntas[groq_perguntas.py Chat]
+        Locais[groq_respostas_locais.py]
+        Groq[Groq API ou fallback local]
+    end
+
+    subgraph evidencias [Evidencias offline]
+        Bench[benchmark_comparativo.py]
+        Exp[experimentos_ag.py]
+    end
+
+    subgraph saida [Saida]
+        Arquivo[melhor_rota.txt]
+        Results[results/]
+    end
+
+    ConfigUI --> TSP
+    Config --> TSP
+    DadosH --> TSP
+
+    TSP --> Runner
+    Runner --> GA
+    Runner --> Pygame
+
+    TSP --> Priorizar
+    Priorizar --> Metricas
+    Metricas --> Dashboard
+    Pygame --> Dashboard
+
+    ContextoPy --> ContextoMD
+    TSP --> Conteudo
+    ContextoPy --> Conteudo
+    Conteudo --> Groq
+    Conteudo --> Dashboard
+
+    TSP --> Rotas
+    Rotas --> Dashboard
+
+    Dashboard --> Perguntas
+    Perguntas --> Locais
+    Locais --> Perguntas
+    ContextoPy --> Perguntas
+    Perguntas --> Groq
+
+    Conteudo --> Arquivo
+    Rotas --> Arquivo
+    Metricas --> Arquivo
+
+    Runner --> Bench
+    Runner --> Exp
+    Bench --> Results
+    Exp --> Results
+```
+
+- **Groq:** 1 chamada para análise + relatórios (`groq_conteudo.py`)
+- **Guia Motoristas:** montado localmente (`groq_rotas.py`)
+- **Chat:** respostas locais primeiro (`groq_respostas_locais.py`), depois Groq se necessário
+
+Detalhes dos módulos: [docs/ARQUITETURA.md](docs/ARQUITETURA.md)
+
 ## Pré-requisitos
 
 - [Anaconda](https://www.anaconda.com/download) ou Miniconda
@@ -198,8 +290,8 @@ O mesmo bloco é gravado em `melhor_rota.txt` ao final de cada simulação (`pyt
 
 ## Documentação
 
+- [Arquitetura e diagrama](docs/ARQUITETURA.md) — versão detalhada do diagrama acima
 - [Visão geral do sistema](docs/VISAO_GERAL_SISTEMA.md) — fluxo, módulos e checklist da equipe
-- [Arquitetura e diagrama](docs/ARQUITETURA.md)
 - [Evidências experimentais](docs/EVIDENCIAS_EXPERIMENTAIS.md) — benchmarks, relatório técnico e demo da LLM
 
 O arquivo `docs/CONTEXTO_IA.md` é carregado automaticamente nos prompts da Groq (`groq_contexto.py`); edite-o para ajustar regras da IA, não como documentação de usuário.
