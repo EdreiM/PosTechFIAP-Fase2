@@ -13,7 +13,7 @@ Sistema de **otimização de rotas hospitalares** (entrega de medicamentos e ins
 2. **Depósito hospitalar** — saída e retorno de todos os veículos
 3. **Dados hospitalares realistas** — nomes de unidades e tipos de entrega (CRITICO, REGULAR, INSUMO)
 4. **Simulação visual** em tempo real (Pygame)
-5. **LLM (Groq — padrão `llama-3.1-8b-instant`)** para análise, relatórios, instruções e chat
+5. **LLM (Groq — padrão `llama-3.1-8b-instant`)** para análise, relatórios e chat; **Guia Motoristas** montado localmente
 6. **Painel operacional** (Tkinter) com abas após a simulação
 7. **Scripts de evidência experimental** — comparativo e 3 experimentos do AG
 
@@ -31,9 +31,9 @@ config_ui.py  →  entregas, veículos, capacidade (kits), autonomia, CSV opcion
                     ↓
 config.py + dados_hospitalares (demandas fixas ou CSV)
                     ↓
-              Pygame + AG (ag_runner.py) geração a geração
+              Pygame + AG (ag_runner.py) — gráfico de fitness + mapa em tempo real
                     ↓
-              Convergência (ou limite de gerações)
+              Parada do AG (convergência ou limite de gerações)
                     ↓
               priorizar_entregas_capacidade() — kits excedentes ficam no hospital
                     ↓
@@ -41,7 +41,9 @@ config.py + dados_hospitalares (demandas fixas ou CSV)
                     ↓
               Divisão por veículo + relatórios numéricos
                     ↓
-              Groq (1 chamada): análise | relatório diário | semanal | instruções
+              Groq (1 chamada): análise | relatório diário | semanal
+                    ↓
+              Guia Motoristas (local): rota passo a passo por veículo
                     ↓
               Fallback local se API indisponível (429, sem chave)
                     ↓
@@ -146,13 +148,14 @@ Ver [EVIDENCIAS_EXPERIMENTAIS.md](EVIDENCIAS_EXPERIMENTAIS.md) para uso no relat
 
 | Arquivo | Papel |
 |---------|-------|
-| `docs/CONTEXTO_IA.md` | Contexto fixo (VRP, kits, regras de resposta) |
+| `docs/CONTEXTO_IA.md` | Regras fixas nos prompts Groq (arquivo operacional — `groq_contexto.py`) |
 | `groq_contexto.py` | Carrega contexto + formata histórico do chat |
 | `groq_utils.py` | Cliente, `.env`, fallback se API falhar |
-| `groq_conteudo.py` | **1 chamada** gera análise + relatórios + instruções |
+| `groq_conteudo.py` | **1 chamada** gera análise + relatório diário + semanal (3 seções LLM) |
+| `groq_rotas.py` | **Guia Motoristas** — montado localmente a partir das rotas (aba do painel) |
 | `groq_perguntas.py` | Chat com histórico (últimos 6 turnos) |
-| `groq_respostas_locais.py` | Respostas locais (instruções, tipos de medicamento, remanescentes) |
-| `groq_analysis.py`, etc. | Fallbacks locais por módulo |
+| `groq_respostas_locais.py` | Chat **local** (sem Groq): instruções, trajetória do motorista, carga por veículo, tipos, kits, remanescentes |
+| `groq_analysis.py`, etc. | Fallbacks locais por módulo (textos enxutos, sem repetir métricas da aba Análise) |
 
 Capacidade/autonomia nos prompts vêm dos **dados da execução** (ex.: 80 kits), não de valores fixos do `config.py`.
 
@@ -160,26 +163,53 @@ Variáveis `.env`: `GROQ_API_KEY`, `GROQ_MODEL` (opcional), `GROQ_DESABILITADO=1
 
 ---
 
-## 8. Testes — `tests/test_projeto.py`
+## 7.1 Painel operacional — `dashboard_ui.py`
+
+Cabeçalho enxuto: apenas o título **Painel Operacional — Rotas Otimizadas** (sem bloco de resumo no topo; KPIs ficam nas abas).
+
+Abas após a simulação:
+
+| Aba | Conteúdo |
+|-----|----------|
+| **Mapa da Rota** | Entregas numeradas, cores por veículo, remanescentes cinza tracejado |
+| **Veículos** | Status operacional completo por van (carga, distância, paradas) |
+| **Análise** | Bloco de métricas (AG + heurísticas + ótimo*) + interpretação da IA |
+| **Relatório Diário** | Fechamento do dia (sem repetir tabela de métricas) |
+| **Relatório Semanal** | Projeção × 5 dias úteis |
+| **Guia Motoristas** | Rota passo a passo por veículo (`groq_rotas.montar_instrucoes_motoristas`) — linguagem direta para quem dirige |
+| **Chat** | Perguntas em linguagem natural (respostas locais ou Groq) |
+
+\*Ótimo VRP só com ≤ 6 entregas e ≤ 6 veículos.
+
+A **evolução do fitness** aparece na simulação **Pygame** (gráfico à esquerda), não no painel.
+
+O **chat** prioriza `groq_respostas_locais.py` para: instruções/trajetória (`carro 2`, `motorista`), carga por veículo, `quantas de cada?` (com histórico), explicação de kits/capacidade, medicamentos por tipo e remanescentes.
+
+---
+
+## 8. Testes — `tests/`
 
 ```bash
-pytest tests/test_projeto.py -v
+py -m pytest tests/test_projeto.py -v
 ```
+
+Guia completo: [`tests/README.md`](../tests/README.md)  
+Cenários reutilizáveis: [`tests/fixtures_dados.py`](../tests/fixtures_dados.py)
 
 | Classe | Cobertura |
 |--------|-----------|
 | `TestConfig` | `config.py`, cidades fixo/aleatório |
 | `TestConfigUI` | Parâmetros padrão da janela |
-| `TestDadosHospitalares` | Nomes, kits fixos, CSV, viabilidade, priorização por capacidade |
+| `TestDadosHospitalares` | Modo fixo: nomes, kits, CSV, viabilidade, priorização |
 | `TestGeneticAlgorithm` | AG, VRP, depósito, crossover, fitness |
 | `TestAgRunner` | Execução do AG reutilizável |
-| `TestGroqUtils` | Fallback Groq, contexto IA, histórico do chat |
-| `TestGroqRespostasLocais` | Chat local: instruções, medicamentos, remanescentes no hospital |
-| `TestDashboardAnalise` | Bloco de métricas na aba Análise (ótimo, heurísticas, omissões) |
-| `TestMetricasBenchmark` | Heurísticas, motivo de omissão do ótimo, economia relativa |
-| `TestRegressaoBugsUsuario` | Cenário real 18 entregas — chat, abas IA, benchmark N/A |
+| `TestGroqUtils` / `TestGroqConteudo` | Fallback Groq, parsing, contexto IA |
+| `TestGroqRespostasLocais` | Chat local: instruções, motorista, carga, kits, follow-up |
+| `TestDashboardMapa` / `TestDashboardAnalise` | Mapa e bloco de métricas |
+| `TestMetricasBenchmark` | Heurísticas, omissão do ótimo, economia relativa |
+| `TestRegressaoBugsUsuario` | Bugs de demo real (18 entregas, veículo 3) |
 
-**84 testes** no total.
+**88 testes** no total.
 
 ---
 
@@ -214,8 +244,10 @@ pytest tests/test_projeto.py -v
 | Como rodar comparativo? | `python benchmark_comparativo.py` |
 | Como rodar experimentos? | `python experimentos_ag.py` |
 | Evidências para relatório? | `docs/EVIDENCIAS_EXPERIMENTAIS.md` |
-| Onde está a IA? | `groq_*.py`, `docs/CONTEXTO_IA.md` |
-| Como rodar testes? | `pytest tests/test_projeto.py -v` |
+| Onde está a IA? | `groq_*.py` + `docs/CONTEXTO_IA.md` (prompts) |
+| Documentação da equipe? | `VISAO_GERAL_SISTEMA.md`, `ARQUITETURA.md`, `EVIDENCIAS_EXPERIMENTAIS.md` |
+| Guia para motoristas? | Aba **Guia Motoristas** no painel (`groq_rotas.py`) |
+| Como rodar testes? | `py -m pytest tests/test_projeto.py -v` — ver `tests/README.md` |
 
 ---
 

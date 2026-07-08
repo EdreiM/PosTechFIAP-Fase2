@@ -122,6 +122,14 @@ No fluxo interativo (`python tsp.py`), as mesmas métricas aparecem na **aba An�
 3. Mapa do painel com H = Hospital e cores por tipo
 4. Relatório semanal: deixar claro na banca que é **projeção** (1 dia × 5), conforme indicado no próprio relatório gerado
 
+### Seção: Demonstração da LLM
+
+1. Aba **Guia Motoristas** — rota passo a passo (montada localmente, sem Groq)
+2. Aba **Chat** — pelo menos 3 perguntas, incluindo uma encadeada (ex.: veículo 2 → "e a distância dele?")
+3. Critérios: usa só dados da execução, respostas curtas, não sugere alterar a ordem do AG
+
+Modelo padrão: `llama-3.1-8b-instant` (Groq). Contexto fixo em `docs/CONTEXTO_IA.md` (carregado por `groq_contexto.py`).
+
 ---
 
 ## 5. Reprodutibilidade

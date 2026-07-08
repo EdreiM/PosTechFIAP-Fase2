@@ -38,6 +38,8 @@ def responder_pergunta(
         texto_rotas_detalhado,
         texto_entregas_por_tipo=texto_entregas_por_tipo,
         texto_remanescentes=texto_remanescentes,
+        historico_conversa=historico,
+        texto_rota_resumo=texto_rota_resumo,
     )
     if resposta_local:
         return resposta_local
@@ -76,39 +78,28 @@ Você é um especialista em logística hospitalar (VRP com kits de medicamentos)
 
 {texto_rota_resumo}
 
-=== ANÁLISE TÉCNICA ===
-
-{analise}
-
-=== RELATÓRIO OPERACIONAL DIÁRIO ===
-
-{relatorio}
-
-=== RELATÓRIO OPERACIONAL SEMANAL ===
-
-{relatorio_semanal}
-
-=== INSTRUÇÕES DE ENTREGA ===
-
-{instrucoes}
-
 === HISTÓRICO DESTA CONVERSA (perguntas anteriores) ===
 
 {historico_texto}
 
-Responda a pergunta atual usando o CONTEXTO DO SISTEMA, os DADOS DA EXECUÇÃO e o HISTÓRICO acima.
-Mantenha coerência com respostas anteriores quando o usuário usar "ele", "esse veículo", "e a carga?" etc.
+Responda a pergunta atual usando os DADOS ESTRUTURADOS e o HISTÓRICO acima.
+(Narrativas das abas Análise/Relatórios não estão aqui — use os blocos operacionais.)
+Mantenha coerência com respostas anteriores quando o usuário usar "ele", "esse veículo", "quantas de cada?" etc.
+Se o histórico citar um veículo e a pergunta for curta (ex.: "quantas de cada?"), responda SOMENTE sobre esse veículo — não liste a operação inteira.
 
 Regras do chat:
 - Resposta CURTA (máximo 5 frases), exceto pedido explícito de instruções completas de rota ou lista de medicamentos por tipo.
 - ORDEM DAS ENTREGAS: use a sequência exata do bloco ORDEM DAS ENTREGAS — não invente ordem.
 - Prioridade clínica = maior número p (9-10 primeiro), NÃO a última parada da rota.
-- Veículo mencionado explicitamente → responda só sobre ele.
+- Veículo mencionado explicitamente ou no histórico → responda só sobre ele.
+- "Cargas" = entregas/paradas; "kits" = unidades de carga. Capacidade = soma máxima de kits no veículo (não é kits por parada fixo).
+- Perguntas "como funciona kits/carga" → explique demanda por entrega vs capacidade total do veículo; não liste todos os veículos.
 - Nunca diga "ajuste a rota" — a ordem do AG é oficial.
 - Capacidade/autonomia sempre por veículo, usando os números ATUAL/MAX dos dados.
 - MEDICAMENTOS / TIPOS: o sistema NÃO possui nomes de fármacos (ex.: dipirona). Use sempre o campo Tipo: CRITICO (medicamentos críticos), REGULAR (rotineiros) ou INSUMO (materiais). Cite unidade + tipo + kits quando listar entregas.
 - CAPACIDADE: veículos NUNCA excedem capacidade. Kits excedentes ficam no hospital (bloco KITS REMANESCENTES) — prioridade mais baixa aguarda próximo turno.
-- Se perguntarem "quais medicamentos" → responda com as categorias CRITICO/REGULAR/INSUMO e liste unidades do bloco ENTREGAS POR TIPO.
+- Se perguntarem "quais medicamentos" SEM veículo no contexto → use o bloco ENTREGAS POR TIPO (operação inteira).
+- Se perguntarem "quantas de cada" após um veículo → filtre pelo veículo no CATÁLOGO (coluna Veíc.) ou em ORDEM DAS ENTREGAS.
 - Se perguntarem o que ficou no hospital → use o bloco KITS REMANESCENTES.
 - Se não houver dado: "Essa informação não está disponível nos resultados atuais."
 

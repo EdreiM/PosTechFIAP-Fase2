@@ -558,20 +558,6 @@ carga_total = sum(
 print(f"Carga total da operação: {carga_total}")
 print(f"Capacidade por veículo: {capacidade_veiculo}")
 
-texto_rota = ""
-
-for item in rota_detalhada:
-
-    texto_rota += (
-        f"Ordem {item['ordem']} | "
-        f"Nome={item['nome']} | "
-        f"Tipo={item['tipo']} | "
-        f"X={item['x']} | "
-        f"Y={item['y']} | "
-        f"Prioridade={item['prioridade']} | "
-        f"Demanda={item['demanda']}\n"
-    )
-
 top10_resumo = ", ".join(
     f"{obter_nome(c)}[{obter_tipo(c)}](p{city_priorities[c]})"
     for i, c in enumerate(best_path[:10], start=1)
@@ -620,40 +606,18 @@ economia_semanal_pct = (
     else 0.0
 )
 texto_resumo_semanal = (
-    f"NOTA: projeção semanal — baseada em 1 execução do AG, "
-    f"replicada por 5 dias úteis (não é histórico real de operação).\n"
-    f"Período projetado: 5 dias úteis simulados\n"
-    f"Depósito: Hospital Central {DEPOT} (saída/retorno de todos os veículos)\n"
-    f"Veículos na frota: {num_veiculos}\n"
-    f"Capacidade por veículo: {capacidade_veiculo} {UNIDADE_MEDIDA_ABREV}\n"
-    f"Autonomia por veículo: {distancia_maxima_veiculo} km\n"
-    f"Entregas por dia (efetivas): {len(rota_detalhada)} | Pedidos totais: {total_pedidos_dia}\n"
-    f"Kits remanescentes no hospital (por dia): {kits_remanescentes_hospital}\n"
-    f"Tipos entregues por dia: CRITICO={contagem_tipos_entregues['CRITICO']} | "
-    f"REGULAR={contagem_tipos_entregues['REGULAR']} | "
-    f"INSUMO={contagem_tipos_entregues['INSUMO']}\n"
-    f"Tipos pedidos (total): CRITICO={contagem_tipos['CRITICO']} | "
-    f"REGULAR={contagem_tipos['REGULAR']} | "
-    f"INSUMO={contagem_tipos['INSUMO']}\n"
-    f"Tipos na semana (projetados — entregues): CRITICO={contagem_tipos_entregues['CRITICO'] * 5} | "
+    f"NOTA: projeção — 1 execução do AG replicada por 5 dias úteis (não é histórico real).\n"
+    f"Distância total semanal projetada: {fitness_final * 5:.2f} km "
+    f"(média diária: {fitness_final:.2f} km)\n"
+    f"Carga total semanal projetada: {carga_total * 5} kits "
+    f"(média diária: {carga_total} kits)\n"
+    f"Tipos na semana (projetados — entregues): "
+    f"CRITICO={contagem_tipos_entregues['CRITICO'] * 5} | "
     f"REGULAR={contagem_tipos_entregues['REGULAR'] * 5} | "
     f"INSUMO={contagem_tipos_entregues['INSUMO'] * 5}\n"
-    f"Distância média diária (com depósito): {fitness_final:.2f}\n"
-    f"Distância total semanal projetada: {fitness_final * 5:.2f}\n"
-    f"Carga média diária: {carga_total}\n"
-    f"Carga total semanal projetada: {carga_total * 5}\n"
-    f"Melhoria de distância (AG vs início): {melhoria_distancia:.2f}%\n"
-    f"Melhoria de fitness (AG): {melhoria_prioridade:.2f}%\n"
-    f"Economia diária vs rota aleatória: {economia_diaria_km:.2f} km\n"
-    f"Economia semanal projetada vs aleatória: {economia_diaria_km * 5:.2f} km "
+    f"Economia semanal projetada vs rota aleatória: {economia_diaria_km * 5:.2f} km "
     f"({economia_semanal_pct:.1f}%)\n"
-    f"Geração de convergência do AG: {geracao_convergencia}\n"
-    f"Entregas CRITICO prioridade 10 (por dia): {prioridade_10}\n"
-    f"Entregas prioridade 9-10 (por dia): {prioridade_9_10}\n"
-    f"Média de prioridade (top 10 da rota): {media_top10:.2f}\n"
-    f"Comparativo diário -> AG: {fitness_final:.2f} | "
-    f"Aleatória: {distancia_aleatoria:.2f} | "
-    f"Ótimo: {otimo_txt}"
+    f"Kits remanescentes no hospital (por dia): {kits_remanescentes_hospital}"
 )
 
 conteudo_ia = gerar_conteudo_completo(
@@ -676,6 +640,7 @@ conteudo_ia = gerar_conteudo_completo(
     texto_resumo_semanal=texto_resumo_semanal,
     texto_remanescentes=texto_remanescentes,
     houve_corte_capacidade=houve_corte_capacidade,
+    texto_rotas_detalhado=texto_rotas_detalhado,
     capacidade_veiculo=capacidade_veiculo,
     distancia_maxima_veiculo=distancia_maxima_veiculo,
 )
@@ -723,52 +688,10 @@ with open("melhor_rota.txt", "w", encoding="utf-8") as arquivo:
         f"INSUMO={contagem_tipos['INSUMO']}\n\n"
     )
    
-    arquivo.write("=" * 50 + "\n\n")
-
-    arquivo.write(f"Fitness inicial: {fitness_inicial:.2f}\n")
-    arquivo.write(f"Fitness final: {fitness_final:.2f}\n")
-    arquivo.write(f"Fitness com prioridade: {fitness_final_prioridade:.2f}\n")
-    arquivo.write(
-        f"Melhoria (fitness): {melhoria_prioridade:.2f}%\n"
-    )
-
-    arquivo.write(
-        f"Melhoria (distância): {melhoria_distancia:.2f}%\n\n"
-    )
-
-    arquivo.write(
-        f"Solução ótima: {otimo_txt}\n\n"
-    )
-
-    if math.isnan(diferenca_benchmark):
-        arquivo.write("Diferença para ótimo VRP: N/A\n\n")
-    else:
-        arquivo.write(
-            f"Diferença para ótimo VRP: {diferenca_benchmark:.2f}%\n\n"
-        )
-
-    arquivo.write(
-        f"Comparativo VRP -> AG: {fitness_final:.2f} | "
-        f"Aleatória: {distancia_aleatoria:.2f} | "
-        f"Vizinho: {distancia_vizinho:.2f} | "
-        f"Greedy: {distancia_greedy:.2f} | "
-        f"Ótimo: {otimo_txt}\n\n"
-    )
-
     arquivo.write("=" * 50 + "\n")
     arquivo.write("MÉTRICAS COMPARATIVAS (MÉTODOS)\n")
     arquivo.write("=" * 50 + "\n\n")
     arquivo.write(montar_bloco_analise_metricas(metricas_comparativo))
-    arquivo.write("\n\n")
-    arquivo.write("Melhor rota encontrada:\n")
-
-    for indice, cidade in enumerate(best_path, start=1):
-        arquivo.write(
-            f"{indice}. {obter_nome(cidade)} [{obter_tipo(cidade)}] | "
-            f"Veículo: {best_alocacao[cidade] + 1} | "
-            f"Prioridade: {city_priorities[cidade]}\n"
-        )
-
     arquivo.write("\n\n")
     arquivo.write("=" * 50 + "\n")
     arquivo.write("ANÁLISE GERADA PELA IA\n")
@@ -792,12 +715,6 @@ with open("melhor_rota.txt", "w", encoding="utf-8") as arquivo:
     arquivo.write("INSTRUÇÕES DE ENTREGA\n")
     arquivo.write("=" * 50 + "\n\n")
     arquivo.write(instrucoes)
-
-    arquivo.write("\n\n")
-    arquivo.write("=" * 50 + "\n")
-    arquivo.write("STATUS DOS VEÍCULOS\n")
-    arquivo.write("=" * 50 + "\n\n")
-    arquivo.write(texto_veiculos)
 
     if houve_corte_capacidade:
         arquivo.write("\n\n")
@@ -849,8 +766,6 @@ abrir_dashboard(
     relatorio_semanal=relatorio_semanal,
     instrucoes=instrucoes,
     texto_veiculos=texto_veiculos,
-    texto_rota_resumo=texto_rota_resumo,
-    best_fitness_values=best_fitness_values,
     fitness_final=fitness_final,
     responder_pergunta_fn=_responder_pergunta_chat,
     rotas_veiculos=rotas_veiculos,

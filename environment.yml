@@ -1,4 +1,4 @@
-name: fiap_tsp
+name: vrp_hospitalar
 channels:
   - defaults
 dependencies:

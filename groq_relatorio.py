@@ -1,6 +1,18 @@
 import math
+import re
 
 from groq_utils import chamar_llm
+
+
+def _resumir_veiculos_para_relatorio(texto_veiculos: str) -> str:
+    """Uma linha por veículo — evita duplicar a aba Veículos inteira."""
+    blocos = re.split(r"(?=Veículo \d+ \|)", texto_veiculos.strip())
+    linhas = []
+    for bloco in blocos:
+        if not bloco.strip():
+            continue
+        linhas.append(f"• {bloco.strip().split(chr(10))[0]}")
+    return "\n".join(linhas) if linhas else "Consulte a aba Veículos para detalhes."
 
 
 def _fallback_relatorio(
@@ -17,42 +29,26 @@ def _fallback_relatorio(
     fitness_target_solution,
     texto_remanescentes="",
 ):
-    diff_otimo = (
-        f"{diferenca_benchmark:.2f}%"
-        if not math.isnan(diferenca_benchmark)
-        else "N/A"
-    )
-    otimo = (
-        f"{fitness_target_solution:.0f} km"
-        if not math.isnan(fitness_target_solution)
-        else "N/A"
-    )
+    resumo_frota = _resumir_veiculos_para_relatorio(texto_veiculos)
 
-    return f"""1. Resumo
-Operação diária concluída: {total_cidades} entregas com {num_veiculos} veículos.
-Distância total: {fitness_final:.0f} km.
+    return f"""1. Resumo operacional
+{total_cidades} entregas efetivas com {num_veiculos} veículos.
+Distância total do dia: {fitness_final:.0f} km.
 
-2. Eficiência da rota
-Melhoria de distância vs. início do AG: {melhoria_distancia:.1f}%.
-Comparativo: AG {fitness_final:.0f} km | Aleatória {distancia_aleatoria:.0f} km | Ótimo {otimo}.
+2. Status da frota
+{resumo_frota}
+Detalhes de paradas e sequência: aba Veículos e Instruções.
 
-3. Capacidade dos veículos
-{texto_veiculos}
-
-4. Autonomia dos veículos
-Ver distância por veículo acima (limite configurado na simulação).
-
-5. Prioridades atendidas
+3. Prioridades atendidas
 {prioridade_10} entregas prioridade 10; {prioridade_9_10} com prioridade 9–10.
 Média nas 10 primeiras posições: {media_top10:.1f}.
-Diferença para ótimo VRP: {diff_otimo}.
 
-6. Kits remanescentes no hospital
+4. Kits remanescentes no hospital
 {texto_remanescentes if texto_remanescentes.strip() else "Nenhum kit remanescente — frota absorveu toda a demanda."}
 
-7. Recomendações
-Informar unidades com kits pendentes no hospital; avaliar reforço de frota se remanescentes forem críticos.
-Relatório gerado localmente — IA Groq indisponível no momento.
+5. Recomendações
+Informar unidades com kits pendentes; avaliar reforço de frota se remanescentes forem críticos.
+Relatório gerado localmente — métricas comparativas na aba Análise.
 """
 
 

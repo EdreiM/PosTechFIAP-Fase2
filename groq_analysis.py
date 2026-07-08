@@ -31,26 +31,33 @@ def _fallback_analisar(
     )
     economia_aleatoria = max(distancia_aleatoria - fitness_final, 0)
 
-    return f"""1. Qualidade da solução
-Distância total da operação: {fitness_final:.0f} km com {num_veiculos} veículos e {total_cidades} entregas.
-Melhoria de distância vs. população inicial: {melhoria_distancia:.1f}%.
-Comparado à rota aleatória ({distancia_aleatoria:.0f} km), economia estimada de {economia_aleatoria:.0f} km.
-Referência ótima VRP: {otimo} (diferença: {diff_otimo}).
+    if math.isnan(fitness_target_solution):
+        nota_otimo = (
+            "Ótimo VRP não calculado (problema grande demais para força bruta) — "
+            "use a tabela comparativa acima (AG vs heurísticas)."
+        )
+    else:
+        nota_otimo = (
+            f"Referência ótima VRP: {otimo} (diferença: {diff_otimo})."
+        )
 
-2. Convergência
-Melhor fitness alcançado na geração {geracao_convergencia}.
-Fitness inicial {fitness_inicial:.0f} → final com prioridades {fitness_final_prioridade:.0f} ({melhoria_fitness:.1f}% de melhoria).
+    linha_economia = (
+        f"Economia estimada vs. rota aleatória: {economia_aleatoria:.0f} km."
+        if economia_aleatoria > 0
+        else ""
+    )
 
-3. Prioridades
+    return f"""1. Convergência
+O AG estabilizou na geração {geracao_convergencia} (fitness {fitness_inicial:.0f} → {fitness_final_prioridade:.0f}, melhoria de {melhoria_fitness:.1f}%).
+
+2. Prioridades clínicas
 {prioridade_10} entregas com prioridade 10; {prioridade_9_10} com prioridade 9–10.
 Média de prioridade nas 10 primeiras posições da rota: {media_top10:.1f}.
 
-4. Benchmark
-AG: {fitness_final:.0f} km | Aleatória: {distancia_aleatoria:.0f} km | Ótimo: {otimo}.
-{"Nota: ótimo não calculado (≥7 entregas) — compare AG vs aleatória." if math.isnan(fitness_target_solution) else ""}
-
-5. Conclusão
-Solução gerada pelo AG. {"Benchmark exato omitido por tamanho do problema." if math.isnan(fitness_target_solution) else "Verifique diferença para o ótimo acima."}
+3. Conclusão
+{total_cidades} entregas em {num_veiculos} veículos. {nota_otimo}
+{linha_economia}
+Interpretação gerada localmente — métricas numéricas na tabela acima.
 """
 
 

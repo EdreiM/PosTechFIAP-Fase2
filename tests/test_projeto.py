@@ -1,14 +1,19 @@
 """
-Testes unitários consolidados do projeto TSP Logística Hospitalar.
+Testes unitários — TSP Logística Hospitalar.
 
-Cobre: config, dados hospitalares, AG/VRP, ag_runner, Groq (fallback, contexto, conteúdo).
+Guia completo: tests/README.md
+Cenários reutilizáveis: tests/fixtures_dados.py
 
-Inclui TestRegressaoBugsUsuario — reproduz falhas encontradas em teste manual real
-(chat priorizando parada errada, eco de prompt nas abas, benchmark N/A mal explicado).
+Mapa rápido:
+  TestConfig / TestConfigUI     → configuração e janela
+  TestDadosHospitalares         → modo FIXO do sistema (tabelas reprodutíveis)
+  TestGeneticAlgorithm / AgRunner → AG/VRP (cidades mínimas 4 pontos)
+  TestGroq*                     → IA e chat (textos simulados em fixtures_dados)
+  TestDashboard*                → painel e métricas
+  TestRegressaoBugsUsuario      → bugs de demo real (18 entregas)
 
-Execute (na raiz do projeto):
-  pytest tests/test_projeto.py -v
-  python tests/test_projeto.py
+Execute:
+  py -m pytest tests/test_projeto.py -v
 """
 
 import sys
@@ -51,21 +56,30 @@ from dados_hospitalares import (
     resumo_tipos,
 )
 
+from tests.fixtures_dados import (
+    CHAT_V2_ROTAS,
+    CHAT_V2_VEICULOS,
+    CHAT_V3_ROTAS,
+    CHAT_V3_VEICULOS,
+    CIDADES_AG_MINI,
+    REGRESSAO_18_ROTAS,
+    REGRESSAO_18_VEICULO_4_POS_PRIORIZACAO,
+    REGRESSAO_18_VEICULOS,
+    configurar_cenario_fixo,
+    configurar_dados_ag_mini,
+    kwargs_fallback_analise_18_entregas,
+    kwargs_groq_conteudo_18_entregas,
+)
+
 # ---------------------------------------------------------------------------
-# Fixtures locais (AG)
+# AG mínimo — alias local (ver fixtures_dados.CIDADES_AG_MINI)
 # ---------------------------------------------------------------------------
 
-CIDADES_AG = [(0, 0), (10, 0), (10, 10), (0, 10)]
+CIDADES_AG = CIDADES_AG_MINI
 
 
 def _configurar_dados_ag():
-    ga.city_priorities.clear()
-    ga.city_demands.clear()
-    ga.city_names.clear()
-    ga.city_types.clear()
-    for cidade in CIDADES_AG:
-        ga.city_priorities[cidade] = 5
-        ga.city_demands[cidade] = 10
+    configurar_dados_ag_mini()
 
 
 # =============================================================================
@@ -136,8 +150,7 @@ class TestConfigUI:
 
 class TestDadosHospitalares:
     def test_configurar_cenario_modo_fixo(self):
-        cities = DEFAULT_PROBLEMS[5].copy()
-        configurar_cenario(cities, seed=42, n_cidades=5, modo="fixo")
+        cities = configurar_cenario_fixo(5)
 
         assert len(ga.city_priorities) == 5
         assert ga.city_names[cities[0]] == "UTI Norte"
@@ -150,8 +163,7 @@ class TestDadosHospitalares:
         assert prioridade_para_tipo(2) == "INSUMO"
 
     def test_valores_fixos_respeitam_faixas(self):
-        cities = DEFAULT_PROBLEMS[10].copy()
-        configurar_cenario(cities, seed=42, n_cidades=10, modo="fixo")
+        cities = configurar_cenario_fixo(10)
 
         for cidade in cities:
             tipo = obter_tipo(cidade)
@@ -160,8 +172,7 @@ class TestDadosHospitalares:
             assert cfg["demanda_min"] <= ga.city_demands[cidade] <= cfg["demanda_max"]
 
     def test_demandas_fixas_reproduziveis(self):
-        cities = DEFAULT_PROBLEMS[5].copy()
-        configurar_cenario(cities, seed=42, n_cidades=5, modo="fixo")
+        cities = configurar_cenario_fixo(5)
         primeira = {c: ga.city_demands[c] for c in cities}
 
         configurar_cenario(cities, seed=999, n_cidades=5, modo="fixo")
@@ -170,7 +181,7 @@ class TestDadosHospitalares:
         assert ga.city_priorities[cities[0]] == 10
 
     def test_carga_total_dia(self):
-        cities = DEFAULT_PROBLEMS[5].copy()
+        cities = configurar_cenario_fixo(5)
         entregas = montar_entregas(cities, seed=42, n_cidades=5, modo="fixo")
         assert carga_total_dia(entregas) == sum(e.demanda for e in entregas)
 
@@ -188,7 +199,7 @@ class TestDadosHospitalares:
         assert entregas[1].tipo == "INSUMO"
 
     def test_viabilidade_frota_insuficiente(self):
-        cities = DEFAULT_PROBLEMS[5].copy()
+        cities = configurar_cenario_fixo(5)
         entregas = montar_entregas(cities, seed=42, n_cidades=5, modo="fixo")
         r = avaliar_viabilidade_frota(entregas, num_veiculos=2, capacidade_veiculo=40)
         assert r["viavel"] is False
@@ -197,13 +208,13 @@ class TestDadosHospitalares:
         assert r["min_veiculos_carga"] == 3
 
     def test_viabilidade_frota_suficiente(self):
-        cities = DEFAULT_PROBLEMS[5].copy()
+        cities = configurar_cenario_fixo(5)
         entregas = montar_entregas(cities, seed=42, n_cidades=5, modo="fixo")
         r = avaliar_viabilidade_frota(entregas, num_veiculos=3, capacidade_veiculo=40)
         assert r["viavel"] is True
 
     def test_cenario_15_entregas_viavel_capacidade_80(self):
-        cities = DEFAULT_PROBLEMS[15].copy()
+        cities = configurar_cenario_fixo(15)
         entregas = montar_entregas(cities, seed=42, n_cidades=15, modo="fixo")
         r = avaliar_viabilidade_frota(entregas, num_veiculos=4, capacidade_veiculo=80)
         assert r["carga_total"] == 264
@@ -211,8 +222,7 @@ class TestDadosHospitalares:
         assert r["viavel"] is True
 
     def test_resumo_tipos(self):
-        cities = DEFAULT_PROBLEMS[15].copy()
-        configurar_cenario(cities, seed=42, n_cidades=15, modo="fixo")
+        cities = configurar_cenario_fixo(15)
         contagem = resumo_tipos(cities)
         assert sum(contagem.values()) == 15
         assert contagem["CRITICO"] == 4
@@ -220,24 +230,21 @@ class TestDadosHospitalares:
         assert contagem["INSUMO"] == 5
 
     def test_formatar_entrega(self):
-        cities = DEFAULT_PROBLEMS[5].copy()
-        configurar_cenario(cities, seed=42, n_cidades=5, modo="fixo")
+        cities = configurar_cenario_fixo(5)
         texto = formatar_entrega(cities[0], ordem=1)
         assert "UTI Norte" in texto
         assert "CRITICO" in texto
         assert "kits" in texto
 
     def test_montar_entregas_por_tipo(self):
-        cities = DEFAULT_PROBLEMS[5].copy()
-        configurar_cenario(cities, seed=42, n_cidades=5, modo="fixo")
+        cities = configurar_cenario_fixo(5)
         texto = montar_entregas_por_tipo(cities)
         assert "CRITICO" in texto
         assert "UTI Norte" in texto
         assert "INSUMO" in texto
 
     def test_priorizar_entregas_capacidade(self):
-        cities = DEFAULT_PROBLEMS[5].copy()
-        configurar_cenario(cities, seed=42, n_cidades=5, modo="fixo")
+        cities = configurar_cenario_fixo(5)
         path = cities.copy()
         alocacao = {c: i % 2 for i, c in enumerate(path)}
         resultado = priorizar_entregas_capacidade(
@@ -251,8 +258,7 @@ class TestDadosHospitalares:
             assert carga <= 30
 
     def test_priorizar_respeita_prioridade(self):
-        cities = DEFAULT_PROBLEMS[5].copy()
-        configurar_cenario(cities, seed=42, n_cidades=5, modo="fixo")
+        cities = configurar_cenario_fixo(5)
         path = cities.copy()
         alocacao = {c: 0 for c in path}
         resultado = priorizar_entregas_capacidade(
@@ -340,8 +346,7 @@ class TestDadosHospitalares:
         self._assert_veiculos_saturados(resultado, capacidade)
 
     def test_priorizar_sem_corte_mantem_comportamento(self):
-        cities = DEFAULT_PROBLEMS[5].copy()
-        configurar_cenario(cities, seed=42, n_cidades=5, modo="fixo")
+        cities = configurar_cenario_fixo(5)
         path = cities.copy()
         alocacao = {c: i % 2 for i, c in enumerate(path)}
         capacidade = 80
@@ -357,16 +362,14 @@ class TestDadosHospitalares:
             assert carga <= capacidade
 
     def test_montar_ordem_global(self):
-        cities = DEFAULT_PROBLEMS[5].copy()
-        configurar_cenario(cities, seed=42, n_cidades=5, modo="fixo")
+        cities = configurar_cenario_fixo(5)
         alocacao = {c: i % 2 for i, c in enumerate(cities)}
         texto = montar_ordem_global(cities, alocacao)
         assert "Última entrega global:" in texto
         assert obter_nome(cities[-1]) in texto
 
     def test_montar_rotas_por_veiculo(self):
-        cities = DEFAULT_PROBLEMS[5].copy()
-        configurar_cenario(cities, seed=42, n_cidades=5, modo="fixo")
+        cities = configurar_cenario_fixo(5)
         rotas = [cities[:2], cities[2:4], [cities[4]]]
         texto = montar_rotas_por_veiculo(rotas)
         assert "Última parada do veículo 1:" in texto
@@ -538,8 +541,7 @@ class TestGeneticAlgorithm:
 class TestAgRunner:
     def test_executar_ag_retorna_metricas(self):
         _configurar_dados_ag()
-        cities = DEFAULT_PROBLEMS[5].copy()
-        configurar_cenario(cities, seed=42, n_cidades=5, modo="fixo")
+        cities = configurar_cenario_fixo(5)
 
         resultado = executar_ag(
             cities,
@@ -575,14 +577,17 @@ class TestGroqUtils:
     def test_gerar_instrucoes_fallback(self, monkeypatch):
         monkeypatch.setenv("GROQ_DESABILITADO", "1")
         from groq_rotas import gerar_instrucoes_rota
+        from tests.fixtures_dados import CHAT_V3_ROTAS, CHAT_V3_VEICULOS
 
         texto = gerar_instrucoes_rota(
-            "Veículo 1\n3 entregas | carga 56/80 | distância 629/1500 | status: ok\n",
+            CHAT_V3_VEICULOS,
             prioridade_10=2,
             prioridade_9_10=3,
+            texto_rotas_detalhado=CHAT_V3_ROTAS,
         )
-        assert "INSTRUÇÕES DE ENTREGA" in texto
-        assert "56/80" in texto
+        assert "GUIA PARA MOTORISTAS" in texto
+        assert "Trajetória" in texto
+        assert "79/80" in texto
 
     def test_contexto_ia_carregado(self):
         from groq_contexto import carregar_contexto_sistema
@@ -676,43 +681,48 @@ Texto instruções.
 
 
 class TestGroqRespostasLocais:
-    TEXTO_VEICULOS = (
-        "Veículo 3 | 5 entregas | carga 79/80 | distância 831/1500 | status: ok\n"
-    )
-    TEXTO_ROTAS = """
-Rotas por veículo (Hospital Central → paradas → Hospital Central):
-
-Veículo 3 (5 paradas):
-  1ª parada: Unidade Domiciliar 11 [CRITICO] (10 prioridade, 12 kits)
-  2ª parada: Unidade de Hemodiálise 5 [CRITICO] (8 prioridade, 10 kits)
-  3ª parada: Home Care 10 [CRITICO] (9 prioridade, 8 kits)
-  4ª parada: Unidade Pediátrica 18 [INSUMO] (1 prioridade, 20 kits)
-  5ª parada: Unidade de Hemodiálise 15 [REGULAR] (4 prioridade, 14 kits)
-  Última parada do veículo 3: Unidade de Hemodiálise 15 [REGULAR]
-"""
+    """Chat local — usa CHAT_V2_* e CHAT_V3_* de tests/fixtures_dados.py."""
 
     def test_instrucoes_veiculo_local_prioridade_correta(self):
         from groq_respostas_locais import gerar_instrucoes_veiculo_local
 
-        texto = gerar_instrucoes_veiculo_local(3, self.TEXTO_VEICULOS, self.TEXTO_ROTAS)
+        texto = gerar_instrucoes_veiculo_local(3, CHAT_V3_VEICULOS, CHAT_V3_ROTAS)
         assert "Unidade Domiciliar 11" in texto
         assert "p10" in texto or "(10 prioridade" in texto
         assert "Hemodiálise 15 (p4)" not in texto
-        assert "Não altere a sequência" in texto
+        assert "Siga a ordem" in texto or "Trajetória" in texto
 
     def test_chat_usa_resposta_local(self):
         from groq_perguntas import responder_pergunta
 
         resposta = responder_pergunta(
             "Eu to no veículo 3 me dá as instruções das entregas",
-            self.TEXTO_VEICULOS,
+            CHAT_V3_VEICULOS,
             "resumo",
-            self.TEXTO_ROTAS,
+            CHAT_V3_ROTAS,
             "a", "r", "s", "i",
         )
         assert "Veículo 3" in resposta
         assert "79/80" in resposta
         assert "Unidade Domiciliar 11" in resposta
+
+    def test_chat_motorista_carro_trajetoria(self):
+        from groq_perguntas import responder_pergunta
+
+        resposta = responder_pergunta(
+            "Eu sou o motorista do carro 2 qual a trajetoria devo seguir?",
+            CHAT_V2_VEICULOS,
+            "resumo",
+            CHAT_V2_ROTAS,
+            "", "", "", "",
+        )
+        assert "Instruções" in resposta or "Trajetória" in resposta or "Motorista" in resposta
+        assert "Veículo 2" in resposta
+        assert "Farmácia Central" in resposta
+        assert "UTI Norte" in resposta
+        assert "Lab. Análises" in resposta
+        assert "Hospital Central" in resposta
+        assert "3 entrega(s) (38/40" not in resposta
 
     def test_chat_remanescentes_hospital(self):
         from groq_perguntas import responder_pergunta
@@ -723,9 +733,9 @@ Veículo 3 (5 paradas):
         )
         resposta = responder_pergunta(
             "O que ficou no hospital?",
-            self.TEXTO_VEICULOS,
+            CHAT_V3_VEICULOS,
             "resumo",
-            self.TEXTO_ROTAS,
+            CHAT_V3_ROTAS,
             "", "", "", "",
             texto_remanescentes=remanescentes,
         )
@@ -736,15 +746,14 @@ Veículo 3 (5 paradas):
         from dados_hospitalares import montar_entregas_por_tipo
         from groq_perguntas import responder_pergunta
 
-        cities = obter_cidades(5, "fixo", 42)
-        configurar_cenario(cities, seed=42, n_cidades=5, modo="fixo")
+        cities = configurar_cenario_fixo(5)
         por_tipo = montar_entregas_por_tipo(cities)
 
         resposta = responder_pergunta(
             "Quais medicamentos temos entregues?",
-            self.TEXTO_VEICULOS,
+            CHAT_V3_VEICULOS,
             "Tipos: CRITICO=2 | REGULAR=2 | INSUMO=1",
-            self.TEXTO_ROTAS,
+            CHAT_V3_ROTAS,
             "", "", "", "",
             texto_entregas_por_tipo=por_tipo,
         )
@@ -753,6 +762,74 @@ Veículo 3 (5 paradas):
         assert "INSUMO" in resposta
         assert "dipirona" not in resposta.lower()
         assert "UTI Norte" in resposta or "categorias de kits" in resposta
+
+    def test_chat_cargas_veiculo_local(self):
+        from groq_perguntas import responder_pergunta
+
+        resposta = responder_pergunta(
+            "Quantas cargas o veículo 2 levou?",
+            CHAT_V2_VEICULOS,
+            "resumo",
+            CHAT_V2_ROTAS,
+            "", "", "", "",
+        )
+        assert "Veículo 2" in resposta
+        assert "3 entrega" in resposta
+        assert "34" in resposta
+        assert "kits" in resposta
+
+    def test_chat_quantas_de_cada_mantem_contexto_veiculo(self):
+        from groq_perguntas import responder_pergunta
+
+        historico = [
+            (
+                "Quantas cargas o veículo 2 levou?",
+                "Veículo 2: 3 entrega(s) (34/40 kits no total).",
+            ),
+        ]
+        resposta = responder_pergunta(
+            "Quantas de cada?",
+            CHAT_V2_VEICULOS,
+            "resumo",
+            CHAT_V2_ROTAS,
+            "", "", "", "",
+            historico_conversa=historico,
+        )
+        assert "Veículo 2" in resposta
+        assert "CRITICO: 2 entrega" in resposta
+        assert "REGULAR: 1 entrega" in resposta
+        assert "INSUMO: 0 entrega" in resposta
+        assert "Farmácia Central" in resposta
+        assert "UTI Norte" in resposta
+        assert "Maternidade" not in resposta
+
+    def test_chat_explica_funcionamento_kits(self):
+        from groq_perguntas import responder_pergunta
+
+        historico = [
+            (
+                "Quantas cargas o veículo 2 levou?",
+                "Veículo 2: 3 entrega(s) (38/40 kits no total).",
+            ),
+        ]
+        resumo = (
+            "Pedidos do dia: 15 | Capacidade/veículo: 40 kits | "
+            "Autonomia/veículo: 1500 km"
+        )
+        resposta = responder_pergunta(
+            "Como funciona a quantidade de kits por carga?",
+            CHAT_V2_VEICULOS,
+            resumo,
+            CHAT_V2_ROTAS,
+            "", "", "", "",
+            historico_conversa=historico,
+        )
+        assert "1 kit" in resposta
+        assert "demanda" in resposta.lower()
+        assert "capacidade" in resposta.lower()
+        assert "veículo 2" in resposta.lower()
+        assert "Veículo 1:" not in resposta
+        assert "Veículo 3:" not in resposta
 
 
 # =============================================================================
@@ -990,73 +1067,12 @@ class TestMetricasBenchmark:
 
 
 # =============================================================================
-# Regressão — bugs reportados em teste manual (18 entregas, veículo 3, etc.)
+# Regressão — bugs de demo real (ver fixtures_dados.REGRESSAO_18_*)
 # =============================================================================
-
-# Dados equivalentes ao cenário real do usuário (modo aleatório, 18 entregas, cap. 80)
-_CENARIO_18_VEICULOS = (
-    "Veículo 1 | 4 entregas | carga 71/80 | distância 571/1500 | status: operacionalmente viável\n"
-    "Veículo 2 | 4 entregas | carga 63/80 | distância 776/1500 | status: operacionalmente viável\n"
-    "Veículo 3 | 5 entregas | carga 79/80 | distância 831/1500 | status: operacionalmente viável\n"
-    "Veículo 4 | 5 entregas | carga 81/80 | distância 728/1500 | status: com restrição\n"
-)
-_CENARIO_18_ROTAS = """
-Rotas por veículo (Hospital Central → paradas → Hospital Central):
-
-Veículo 3 (5 paradas):
-  1ª parada: Unidade Domiciliar 11 [CRITICO] (10 prioridade, 12 kits)
-  2ª parada: Unidade de Hemodiálise 5 [CRITICO] (8 prioridade, 10 kits)
-  3ª parada: Home Care 10 [CRITICO] (9 prioridade, 8 kits)
-  4ª parada: Unidade Pediátrica 18 [INSUMO] (1 prioridade, 20 kits)
-  5ª parada: Unidade de Hemodiálise 15 [REGULAR] (4 prioridade, 14 kits)
-  Última parada do veículo 3: Unidade de Hemodiálise 15 [REGULAR]
-
-Veículo 4 (5 paradas):
-  1ª parada: Unidade Domiciliar 1 [CRITICO] (9 prioridade, 10 kits)
-  2ª parada: Posto de Saúde 2 [REGULAR] (5 prioridade, 16 kits)
-  3ª parada: Ambulatório de Especialidades 16 [REGULAR] (6 prioridade, 18 kits)
-  4ª parada: Centro de Cardiologia 9 [REGULAR] (5 prioridade, 16 kits)
-  5ª parada: Posto de Saúde 12 [INSUMO] (3 prioridade, 22 kits)
-  Última parada do veículo 4: Posto de Saúde 12 [INSUMO]
-"""
-
-
-def _kwargs_conteudo_18_entregas():
-    return dict(
-        fitness_inicial=6914.0,
-        fitness_final=2905.56,
-        fitness_final_prioridade=4859.0,
-        melhoria_fitness=39.54,
-        melhoria_distancia=44.14,
-        fitness_target_solution=float("nan"),
-        diferenca_benchmark=float("nan"),
-        top10_prioridades=[10, 9, 9, 8, 7, 6, 5, 4, 3, 2],
-        geracao_convergencia=646,
-        prioridade_10=1,
-        prioridade_9_10=5,
-        media_top10=7.9,
-        total_cidades=18,
-        num_veiculos=4,
-        distancia_aleatoria=6914.0,
-        texto_veiculos=_CENARIO_18_VEICULOS,
-        texto_resumo_semanal="Projeção semanal — 18 entregas × 5 dias",
-        capacidade_veiculo=80,
-        distancia_maxima_veiculo=1500,
-    )
-
-
-def _kwargs_fallback_analise_18():
-    k = _kwargs_conteudo_18_entregas()
-    k.pop("top10_prioridades")
-    k.pop("texto_veiculos")
-    k.pop("texto_resumo_semanal")
-    k.pop("capacidade_veiculo")
-    k.pop("distancia_maxima_veiculo")
-    return k
 
 
 class TestRegressaoBugsUsuario:
-    """Falhas que os testes antigos NÃO pegavam — cenário real de demo."""
+    """Falhas encontradas em teste manual que os testes genéricos não pegavam."""
 
     def test_pergunta_exata_veiculo_3_instrucoes(self):
         from groq_perguntas import responder_pergunta
@@ -1064,9 +1080,9 @@ class TestRegressaoBugsUsuario:
 
         resposta = responder_pergunta(
             "Eu to no veículo 3 me dá as instruções das entregas",
-            _CENARIO_18_VEICULOS,
+            REGRESSAO_18_VEICULOS,
             "Capacidade/veículo: 80 kits",
-            _CENARIO_18_ROTAS,
+            REGRESSAO_18_ROTAS,
             "", "", "", "",
         )
         assert_instrucoes_veiculo_coerentes(resposta, 3, capacidade=80)
@@ -1079,7 +1095,7 @@ class TestRegressaoBugsUsuario:
         from tests.validadores_ia import assert_instrucoes_veiculo_coerentes
 
         texto = gerar_instrucoes_veiculo_local(
-            3, _CENARIO_18_VEICULOS.split("\n")[2] + "\n", _CENARIO_18_ROTAS
+            3, REGRESSAO_18_VEICULOS.split("\n")[2] + "\n", REGRESSAO_18_ROTAS
         )
         assert_instrucoes_veiculo_coerentes(texto, 3)
         assert "Unidade Domiciliar 11 (p10)" in texto or "p10" in texto
@@ -1089,8 +1105,8 @@ class TestRegressaoBugsUsuario:
 
         texto = gerar_instrucoes_veiculo_local(
             4,
-            "Veículo 4 | 3 entregas | carga 60/80 | distância 728/1500 | status: operacionalmente viável\n",
-            _CENARIO_18_ROTAS,
+            REGRESSAO_18_VEICULO_4_POS_PRIORIZACAO,
+            REGRESSAO_18_ROTAS,
         )
         assert "81/80" not in texto
         assert "com restrição" not in texto.lower() or "autonomia" in texto.lower()
@@ -1104,7 +1120,7 @@ class TestRegressaoBugsUsuario:
         from groq_analysis import _fallback_analisar
         from tests.validadores_ia import assert_analise_benchmark_na_ok
 
-        texto = _fallback_analisar(**_kwargs_fallback_analise_18())
+        texto = _fallback_analisar(**kwargs_fallback_analise_18_entregas())
         assert_analise_benchmark_na_ok(texto)
 
     def test_conteudo_fallback_18_entregas_sem_eco_nas_abas(self, monkeypatch):
@@ -1112,7 +1128,7 @@ class TestRegressaoBugsUsuario:
         from groq_conteudo import gerar_conteudo_completo
         from tests.validadores_ia import assert_todas_abas_ia
 
-        resultado = gerar_conteudo_completo(**_kwargs_conteudo_18_entregas())
+        resultado = gerar_conteudo_completo(**kwargs_groq_conteudo_18_entregas())
         assert_todas_abas_ia(resultado)
 
     def test_resposta_llm_com_eco_e_limpa_abas(self, monkeypatch):
@@ -1142,7 +1158,7 @@ Veículo 3: priorize Unidade Domiciliar 11 (p10).
         from groq_conteudo import gerar_conteudo_completo
         from tests.validadores_ia import assert_todas_abas_ia
 
-        resultado = gerar_conteudo_completo(**_kwargs_conteudo_18_entregas())
+        resultado = gerar_conteudo_completo(**kwargs_groq_conteudo_18_entregas())
         assert_todas_abas_ia(resultado)
         assert "44%" in resultado["analise"] or "2905" in resultado["relatorio"]
         assert "81/80" in resultado["relatorio"]
