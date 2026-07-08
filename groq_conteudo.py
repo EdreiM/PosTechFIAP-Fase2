@@ -9,7 +9,7 @@ from metricas_benchmark import motivo_omissao_benchmark
 from groq_analysis import _fallback_analisar
 from groq_relatorio import _fallback_relatorio
 from groq_relatorio_semanal import _fallback_relatorio_semanal
-from groq_rotas import _fallback_instrucoes
+from groq_rotas import _fallback_instrucoes, montar_instrucoes_motoristas
 from groq_contexto import bloco_contexto_para_prompt
 from groq_utils import chamar_llm
 
@@ -67,6 +67,17 @@ def _parse_resposta_combinada(texto: str) -> Dict[str, str]:
     }
 
 
+def _instrucoes_para_aba(**kwargs) -> str:
+    rotas = kwargs.get("texto_rotas_detalhado", "")
+    if rotas and rotas.strip():
+        return montar_instrucoes_motoristas(kwargs["texto_veiculos"], rotas)
+    return _fallback_instrucoes(
+        kwargs["texto_veiculos"],
+        kwargs["prioridade_10"],
+        kwargs["prioridade_9_10"],
+    )
+
+
 def _fallback_completo(**kwargs) -> Dict[str, str]:
     analise = _fallback_analisar(
         kwargs["fitness_inicial"],
@@ -100,13 +111,8 @@ def _fallback_completo(**kwargs) -> Dict[str, str]:
     )
     relatorio_semanal = _fallback_relatorio_semanal(
         kwargs["texto_resumo_semanal"],
-        kwargs["texto_veiculos"],
     )
-    instrucoes = _fallback_instrucoes(
-        kwargs["texto_veiculos"],
-        kwargs["prioridade_10"],
-        kwargs["prioridade_9_10"],
-    )
+    instrucoes = _instrucoes_para_aba(**kwargs)
     return {
         "analise": analise,
         "relatorio": relatorio,
@@ -138,6 +144,7 @@ def gerar_conteudo_completo(
     distancia_maxima_veiculo,
     texto_remanescentes="",
     houve_corte_capacidade=False,
+    texto_rotas_detalhado="",
 ) -> Dict[str, str]:
     otimo_txt = (
         f"{fitness_target_solution:.2f}"
@@ -183,6 +190,7 @@ def gerar_conteudo_completo(
         "texto_resumo_semanal": texto_resumo_semanal,
         "texto_remanescentes": texto_remanescentes,
         "houve_corte_capacidade": houve_corte_capacidade,
+        "texto_rotas_detalhado": texto_rotas_detalhado,
     }
 
     prompt = f"""
@@ -211,24 +219,24 @@ Projeção semanal (5 dias úteis — NÃO é histórico real):
 
 Benchmark: {nota_benchmark}
 
-Gere APENAS o conteúdo abaixo, com estes 4 marcadores (copie literalmente).
+Gere APENAS o conteúdo abaixo, com estes 3 marcadores (copie literalmente).
 NÃO repita estas instruções. NÃO escreva linhas como "máx. N palavras" ou títulos de seção.
 Cada marcador em linha própria; conteúdo começa na linha seguinte.
+(O guia para motoristas é montado automaticamente a partir das rotas — não gere seção INSTRUCOES.)
 
 === ANALISE ===
-(qualidade, convergência, prioridades, benchmark, conclusão — até 200 palavras)
+(interprete convergência, prioridades e conclusão — NÃO repita distâncias, % ou tabela comparativa — até 150 palavras)
 
 === RELATORIO_DIARIO ===
-(resumo, eficiência, capacidade/autonomia POR VEÍCULO, prioridades, kits no hospital se houver, recomendações — até 250 palavras)
+(fechamento do dia: resumo operacional, status POR VEÍCULO em 1 linha cada, prioridades, remanescentes, recomendações — NÃO recite comparativo VRP — até 200 palavras)
 
 === RELATORIO_SEMANAL ===
-(projeção ×5 dias úteis, tendências, recomendações — deixe claro que é projeção — até 250 palavras)
-
-=== INSTRUCOES ===
-(por veículo: carga, distância, status; cite a parada de MAIOR prioridade (9-10) — até 180 palavras)
+(somente projeção ×5 dias, tendências e recomendações estratégicas — NÃO recite KPIs diários nem relatório diário — até 200 palavras)
 
 Regras:
 - Português operacional, sem tom acadêmico.
+- ANALISE complementa a tabela de métricas — não duplique números já listados no painel.
+- RELATORIO_DIARIO e RELATORIO_SEMANAL têm papéis distintos (dia vs projeção semanal).
 - Prioridade clínica = número p9/p10 maior, NÃO a última parada da rota.
 - Não diga "ajuste a rota" — a ordem do AG é a oficial.
 - Veículos NUNCA excedem capacidade — kits excedentes ficam no hospital (prioridade mais baixa).
@@ -240,7 +248,9 @@ Regras:
         parsed = _parse_resposta_combinada(texto)
         fallback = _fallback_completo(**kwargs)
         for chave in fallback:
-            if not parsed.get(chave):
+            if chave == "instrucoes":
+                parsed[chave] = _instrucoes_para_aba(**kwargs)
+            elif not parsed.get(chave):
                 parsed[chave] = fallback[chave]
         return parsed
 

@@ -1,25 +1,17 @@
 from groq_utils import chamar_llm
 
 
-def _fallback_relatorio_semanal(texto_resumo_semanal, texto_veiculos):
-    return f"""1. Resumo da semana (projeção)
+def _fallback_relatorio_semanal(texto_resumo_semanal):
+    return f"""1. Projeção semanal (5 dias úteis)
 {texto_resumo_semanal}
 
-2. Eficiência acumulada das rotas
-Projeção baseada em 5 dias úteis replicando a rota otimizada do AG.
+2. Tendências
+Estimativa baseada em 1 dia otimizado replicado — não é histórico real de operação.
 
-3. Economia de tempo e recursos
-Ver comparativo diário vs. rota aleatória no resumo acima.
-
-4. Padrões identificados
-Distribuição por tipo CRITICO/REGULAR/INSUMO e uso da frota conforme resumo.
-
-5. Recomendações estratégicas
-Revisar alocação de entregas críticas e capacidade por veículo.
+3. Recomendações estratégicas
+Revisar alocação de entregas críticas e capacidade por veículo na próxima semana.
+Status operacional diário: aba Veículos.
 Relatório semanal gerado localmente — IA Groq indisponível no momento.
-
-Referência — veículos (operação diária):
-{texto_veiculos}
 """
 
 
@@ -75,5 +67,5 @@ Regras:
 
     return chamar_llm(
         prompt,
-        lambda: _fallback_relatorio_semanal(texto_resumo_semanal, texto_veiculos),
+        lambda: _fallback_relatorio_semanal(texto_resumo_semanal),
     )

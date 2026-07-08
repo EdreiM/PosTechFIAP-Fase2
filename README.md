@@ -1,6 +1,6 @@
 # Tech Challenge Fase 2 — Otimização de Rotas Médicas
 
-Sistema de otimização de rotas para distribuição de medicamentos e insumos hospitalares, usando **Algoritmo Genético (VRP)** e **LLM (Groq)** para relatórios, instruções e chat operacional.
+Sistema de **roteirização hospitalar (VRP)** para distribuição de medicamentos e insumos, com **Algoritmo Genético**, **LLM (Groq)** para análise/relatórios/chat e **guia para motoristas** montado localmente.
 
 ## Unidade de carga
 
@@ -12,14 +12,14 @@ No **modo fixo**, demandas e prioridades por unidade são **tabelas fixas** (rep
 
 ## O que o projeto faz
 
-1. Otimiza rotas de entrega com Algoritmo Genético
+1. Otimiza rotas de entrega com Algoritmo Genético (múltiplos veículos, depósito hospitalar)
 2. Considera **prioridades**, **capacidade (kits)**, **autonomia**, **depósito hospitalar** e **tipos de entrega** (CRITICO, REGULAR, INSUMO)
 3. **Prioriza kits de maior prioridade** quando a frota não comporta toda a demanda — o excedente **permanece no hospital** e é reportado
 4. Usa **nomes reais de unidades hospitalares** (UTI, Home Care, Farmácia, etc.)
 5. Exibe **resumo dos pedidos** antes de rodar (unidade · tipo · kits · prioridade)
 6. Simula a evolução em tempo real (Pygame)
-7. Gera **análise**, **relatórios**, **instruções** e **chat** com IA
-8. Abre painel operacional com abas (mapa com H = hospital, veículos, chat)
+7. Gera **análise**, **relatórios**, **guia motoristas** e **chat**
+8. Abre painel operacional com 7 abas (mapa, veículos, análise, relatórios, guia motoristas, chat)
 
 ## Pré-requisitos
 
@@ -30,7 +30,7 @@ No **modo fixo**, demandas e prioridades por unidade são **tabelas fixas** (rep
 
 ```bash
 conda env create --file environment.yml
-conda activate fiap_tsp
+conda activate vrp_hospitalar
 ```
 
 Crie um arquivo `.env` na raiz do projeto:
@@ -48,13 +48,15 @@ GROQ_API_KEY=sua_chave_aqui
 | `GROQ_MODEL` | Modelo (padrão: `llama-3.1-8b-instant`; ex.: `llama-3.3-70b-versatile`) |
 | `GROQ_DESABILITADO=1` | Pula a API e usa textos locais (demo offline) |
 
-Se a cota diária da Groq esgotar (erro 429), o sistema **não interrompe** — gera análise, relatórios e instruções localmente e abre o painel normalmente. Nova chave API na **mesma conta** compartilha a mesma cota.
+Se a cota diária da Groq esgotar (erro 429), o sistema **não interrompe** — gera análise e relatórios localmente, monta o guia motoristas e abre o painel normalmente. Nova chave API na **mesma conta** compartilha a mesma cota.
 
 ## Como executar
 
 ```bash
 python tsp.py
 ```
+
+> `tsp.py` é o ponto de entrada do fluxo VRP hospitalar (nome histórico do arquivo principal).
 
 Fluxo completo:
 
@@ -99,7 +101,7 @@ Gráfico de fitness à esquerda; mapa com depósito **H**, rotas coloridas por v
 
 ![Painel operacional — mapa, tipos de entrega e rotas por veículo](painel_operacional.png)
 
-Abas: mapa, veículos, **análise** (métricas completas do AG + comparativo com aleatória, vizinho mais próximo, greedy e ótimo quando viável), relatórios, instruções, convergência e chat. No mapa, **nós numerados** = entregas efetivas; **nós cinza tracejados (—)** = kits que ficaram no hospital por falta de capacidade; **marcadores coloridos perto do H (V1, V2…)** = veículos ociosos sem rota nesta execução. Resultados salvos em `melhor_rota.txt` (local, não vai para o Git), incluindo o bloco completo de **métricas comparativas** (mesmo conteúdo da aba Análise).
+Abas: mapa, veículos, **análise** (métricas do AG + comparativo com aleatória, vizinho mais próximo, greedy e ótimo quando viável + interpretação da IA), relatórios diário/semanal, **guia motoristas** (rota passo a passo por veículo) e chat. O cabeçalho mostra apenas o título — sem bloco de resumo no topo. A **convergência** do AG aparece só na simulação **Pygame** (gráfico à esquerda), não no painel. No mapa, **nós numerados** = entregas efetivas; **nós cinza tracejados (—)** = kits que ficaram no hospital por falta de capacidade; **marcadores coloridos perto do H (V1, V2…)** = veículos ociosos sem rota nesta execução. Resultados salvos em `melhor_rota.txt` (local, não vai para o Git): rotas por veículo, remanescentes e bloco de **métricas comparativas** (mesmo conteúdo da aba Análise).
 
 ### Pedidos via CSV (opcional)
 
@@ -123,12 +125,13 @@ Usam apenas `config.py` (sem janela gráfica).
 ## Testes automatizados
 
 ```bash
-pytest tests/test_projeto.py -v
-# ou
-python tests/test_projeto.py
+py -m pytest tests/test_projeto.py -v
 ```
 
-**84 testes** em um único arquivo — config, AG/VRP, priorização de capacidade, mapa do dashboard, métricas comparativas, IA (Groq) e **regressão de bugs de demo**.
+**88 testes** — config, modo fixo, AG/VRP, chat local, dashboard, IA (fallback) e regressão de bugs de demo.
+
+Guia do que cada teste faz: [`tests/README.md`](tests/README.md)  
+Cenários reutilizáveis (modo fixo vs textos simulados): [`tests/fixtures_dados.py`](tests/fixtures_dados.py)
 
 ## Estrutura do projeto
 
@@ -142,19 +145,22 @@ heuristics.py          # Heurísticas para comparativo
 metricas_benchmark.py  # Métricas AG vs heurísticas vs ótimo (aba Análise)
 benchmark_comparativo.py
 experimentos_ag.py
-tsp.py                 # Fluxo principal
-dashboard_ui.py        # Painel com abas e chat
+tsp.py                 # Ponto de entrada — orquestra simulação VRP + painel
+dashboard_ui.py        # Painel com 7 abas (cabeçalho enxuto) e chat
 draw_functions.py      # Pygame (gráfico + mapa)
-groq_conteudo.py      # Gera análise + relatórios + instruções (1 chamada API)
-groq_contexto.py      # Carrega docs/CONTEXTO_IA.md
-groq_utils.py         # Cliente Groq, fallback e .env
-groq_*.py             # Módulos LLM (análise, relatórios, chat)
-docs/CONTEXTO_IA.md   # Contexto fixo para a IA (chat e relatórios)
+groq_conteudo.py       # Análise + relatórios (1 chamada API, 3 seções)
+groq_rotas.py          # Guia Motoristas — rota passo a passo (local)
+groq_contexto.py       # Carrega docs/CONTEXTO_IA.md nos prompts
+groq_utils.py          # Cliente Groq, fallback e .env
+groq_respostas_locais.py # Respostas locais do chat
+groq_*.py              # Fallbacks por módulo
 exemplos/              # CSV de exemplo
-groq_respostas_locais.py # Respostas locais (instruções, medicamentos, hospital)
-tests/test_projeto.py  # Testes unitários (58) + validadores_ia.py
-tests/validadores_ia.py # Regras de qualidade mínima das saídas de IA
+tests/                 # Suite de testes (ver tests/README.md)
 docs/
+  VISAO_GERAL_SISTEMA.md   # Visão do sistema para a equipe
+  ARQUITETURA.md           # Diagrama e módulos
+  EVIDENCIAS_EXPERIMENTAIS.md  # Benchmarks e relatório técnico
+  CONTEXTO_IA.md           # Regras fixas nos prompts Groq (não é doc de leitura)
 results/               # Gerado localmente (gitignored)
 ```
 
@@ -165,7 +171,7 @@ Parâmetros técnicos e padrões da janela. Obrigatório para scripts de benchma
 | Parâmetro | Padrão | Descrição |
 |-----------|--------|-----------|
 | `UNIDADE_MEDIDA` | kit de medicamentos | Unidade de demanda e capacidade |
-| `N_CIDADES` | 15 | Entregas (padrão da janela) |
+| `N_CIDADES` | 15 | Entregas hospitalares (padrão da janela) |
 | `MODO_CIDADES` | `"fixo"` | `"fixo"` (5/10/12/15) ou `"aleatorio"` |
 | `DEPOT` | `(400, 200)` | Depósito hospitalar |
 | `NUM_VEICULOS` | 4 | Veículos (padrão da janela) |
@@ -190,13 +196,13 @@ O mesmo bloco é gravado em `melhor_rota.txt` ao final de cada simulação (`pyt
 
 \*Ótimo só com **≤ 6 entregas**, **≤ 6 veículos** e veículos ≤ entregas. Script completo: `python benchmark_comparativo.py`.
 
-## Documentação adicional
+## Documentação
 
-- [Visão geral do sistema](docs/VISAO_GERAL_SISTEMA.md)
+- [Visão geral do sistema](docs/VISAO_GERAL_SISTEMA.md) — fluxo, módulos e checklist da equipe
 - [Arquitetura e diagrama](docs/ARQUITETURA.md)
-- [Evidências experimentais](docs/EVIDENCIAS_EXPERIMENTAIS.md)
-- [Avaliação da LLM](docs/AVALIACAO_LLM.md)
-- [Contexto da IA](docs/CONTEXTO_IA.md)
+- [Evidências experimentais](docs/EVIDENCIAS_EXPERIMENTAIS.md) — benchmarks, relatório técnico e demo da LLM
+
+O arquivo `docs/CONTEXTO_IA.md` é carregado automaticamente nos prompts da Groq (`groq_contexto.py`); edite-o para ajustar regras da IA, não como documentação de usuário.
 
 ## Relação com o Tech Challenge (PDF Fase 2)
 
@@ -209,10 +215,10 @@ O mesmo bloco é gravado em `melhor_rota.txt` ao final de cada simulação (`pyt
 | Comparativo com outras abordagens | `benchmark_comparativo.py` |
 | 3 experimentos com configs do AG | `experimentos_ag.py` |
 | Visualização em mapa | Pygame + painel |
-| LLM: instruções, relatórios, melhorias | Implementado |
+| LLM: instruções, relatórios, melhorias | Análise/relatórios via Groq; guia motoristas local |
 | Chat em linguagem natural | Implementado |
 | Configuração interativa + resumo de pedidos | `config_ui.py` |
-| Testes automatizados | `tests/test_projeto.py` (84) |
+| Testes automatizados | `tests/test_projeto.py` (88) — ver `tests/README.md` |
 | Documentação e diagrama | `docs/` |
 | Relatório técnico / vídeo demo | A entregar pelo grupo |
 

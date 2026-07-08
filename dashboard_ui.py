@@ -30,6 +30,31 @@ NOMES_CORES_VEICULOS = [
     "V5 laranja", "V6 ciano", "V7 rosa", "V8 cinza",
 ]
 
+CHAT_TAG_POR_AUTOR = {
+    "Você": "chat_usuario",
+    "Assistente": "chat_assistente",
+    "Sistema": "chat_sistema",
+}
+
+
+def _configurar_tags_chat(historico: scrolledtext.ScrolledText) -> None:
+    """Destaca apenas o nome do autor na aba Chat."""
+    historico.tag_configure(
+        "chat_usuario",
+        foreground="#1e40af",
+        font=("Segoe UI", 10, "bold"),
+    )
+    historico.tag_configure(
+        "chat_assistente",
+        foreground="#166534",
+        font=("Segoe UI", 10, "bold"),
+    )
+    historico.tag_configure(
+        "chat_sistema",
+        foreground="#64748b",
+        font=("Segoe UI", 10, "italic"),
+    )
+
 
 def _metricas_legacy_para_bloco(
     fitness_final: float,
@@ -265,8 +290,6 @@ def abrir_dashboard(
     relatorio_semanal,
     instrucoes,
     texto_veiculos,
-    texto_rota_resumo,
-    best_fitness_values,
     fitness_final,
     responder_pergunta_fn,
     rotas_veiculos=None,
@@ -298,16 +321,7 @@ def abrir_dashboard(
         text="Painel Operacional — Rotas Otimizadas",
         font=("Segoe UI", 14, "bold"),
     )
-    cabecalho.pack(pady=(12, 4))
-
-    resumo = ttk.Label(
-        root,
-        text=texto_rota_resumo.replace("\n", "   •   "),
-        font=("Segoe UI", 9),
-        wraplength=860,
-        justify=tk.CENTER,
-    )
-    resumo.pack(pady=(0, 10), padx=12)
+    cabecalho.pack(pady=(12, 10))
 
     notebook = ttk.Notebook(root)
     notebook.pack(fill=tk.BOTH, expand=True, padx=12, pady=4)
@@ -345,7 +359,6 @@ def abrir_dashboard(
     n_entregues = len(best_solution) if best_solution else 0
     n_pedidos = len(cities_locations)
     legenda_partes = [
-        f"Distância total: {fitness_final:.2f}",
         f"H = Hospital",
         f"Número = ordem global ({n_entregues}/{n_pedidos} entregas)",
         legenda_veiculos,
@@ -381,31 +394,13 @@ def abrir_dashboard(
         )
     )
     conteudo_analise = (
-        f"{bloco_benchmark}\n\n{'─' * 40}\n\nANÁLISE TÉCNICA (IA)\n\n{analise}"
+        f"{bloco_benchmark}\n\n{'─' * 40}\n\n"
+        f"INTERPRETAÇÃO (IA)\n\n{analise}"
     )
     _criar_aba_texto(notebook, "Análise", conteudo_analise)
     _criar_aba_texto(notebook, "Relatório Diário", relatorio)
     _criar_aba_texto(notebook, "Relatório Semanal", relatorio_semanal)
-    _criar_aba_texto(notebook, "Instruções", instrucoes)
-
-    aba_convergencia = ttk.Frame(notebook)
-    notebook.add(aba_convergencia, text="Convergência")
-
-    texto_convergencia = scrolledtext.ScrolledText(
-        aba_convergencia, wrap=tk.WORD, font=("Segoe UI", 10)
-    )
-    texto_convergencia.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
-
-    linhas = [
-        f"Geração {i + 1}: {valor:.2f}"
-        for i, valor in enumerate(best_fitness_values)
-    ]
-    texto_convergencia.insert(
-        tk.END,
-        "Evolução do fitness (distância + prioridades):\n\n"
-        + "\n".join(linhas),
-    )
-    texto_convergencia.config(state=tk.DISABLED)
+    _criar_aba_texto(notebook, "Guia Motoristas", instrucoes)
 
     aba_chat = ttk.Frame(notebook)
     notebook.add(aba_chat, text="Chat")
@@ -414,6 +409,7 @@ def abrir_dashboard(
         aba_chat, wrap=tk.WORD, font=("Segoe UI", 10), state=tk.DISABLED
     )
     historico.pack(fill=tk.BOTH, expand=True, padx=8, pady=(8, 4))
+    _configurar_tags_chat(historico)
 
     frame_entrada = ttk.Frame(aba_chat)
     frame_entrada.pack(fill=tk.X, padx=8, pady=(0, 8))
@@ -428,15 +424,17 @@ def abrir_dashboard(
     historico_turnos: list[tuple[str, str]] = []
 
     def adicionar_mensagem(autor, mensagem):
+        tag_autor = CHAT_TAG_POR_AUTOR.get(autor, "chat_sistema")
         historico.config(state=tk.NORMAL)
-        historico.insert(tk.END, f"\n{autor}:\n{mensagem}\n")
+        historico.insert(tk.END, "\n")
+        historico.insert(tk.END, autor, tag_autor)
+        historico.insert(tk.END, f": {mensagem}\n")
         historico.see(tk.END)
         historico.config(state=tk.DISABLED)
 
     adicionar_mensagem(
         "Sistema",
-        "Pergunte sobre rotas, veículos, capacidade, prioridades ou ordem das entregas.\n"
-        "Ex.: Qual veículo tem maior carga? Qual a última parada do veículo 2?",
+        "Pergunte sobre rotas, veículos, capacidade ou prioridades.",
     )
 
     def ao_receber_resposta(pergunta, resposta):
@@ -458,7 +456,6 @@ def abrir_dashboard(
         adicionar_mensagem("Você", pergunta)
         processando["ativo"] = True
         btn_enviar.config(state=tk.DISABLED)
-        adicionar_mensagem("Sistema", "Consultando IA...")
         historico_envio = list(historico_turnos)
 
         def worker():
