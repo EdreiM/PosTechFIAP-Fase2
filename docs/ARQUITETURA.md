@@ -10,75 +10,87 @@ Inclui **depósito hospitalar**, **nomes de unidades**, **tipos de entrega** (CR
 
 ```mermaid
 flowchart TB
-    subgraph entrada [Entrada]
+    subgraph entrada [Entrada e configuracao]
         ConfigUI[config_ui.py]
-        Cidades[Cidades e coordenadas]
+        Config[config.py]
         DadosH[dados_hospitalares.py]
-        Nomes[Nomes das unidades]
-        Tipos[Tipos CRITICO REGULAR INSUMO]
-        Deposito[Depósito hospitalar]
-        Config[config.py VRP e AG]
     end
 
-    subgraph ag [Algoritmo Genético]
+    subgraph orquestracao [Orquestracao tsp.py]
+        TSP[tsp.py]
+        Priorizar[priorizar_entregas_capacidade]
+        Metricas[metricas_benchmark.py]
+    end
+
+    subgraph ag [Algoritmo Genetico]
         Runner[ag_runner.py]
-        Pop[População inicial]
-        Fitness[Fitness VRP com depósito]
-        Sel[Cruzamento + Mutação]
-        Conv[Convergência]
+        GA[genetic_algorithm.py]
     end
 
-    subgraph bench [Evidências experimentais]
-        Comp[benchmark_comparativo.py]
-        Exp[experimentos_ag.py]
-        Heur[heuristics.py]
+    subgraph visual [Visualizacao]
+        Pygame[Pygame fitness e mapa]
+        Dashboard[dashboard_ui.py 7 abas]
     end
 
-    subgraph visual [Visualização]
-        Pygame[Simulação Pygame — gráfico fitness + mapa]
-        Dash[Painel Tkinter — 7 abas]
-    end
-
-    subgraph llm [Integração LLM - Groq]
-        Contexto[docs/CONTEXTO_IA.md]
-        Utils[groq_utils.py]
-        Conteudo[groq_conteudo.py]
-        Rotas[groq_rotas.py]
-        Chat[groq_perguntas.py]
-        Local[groq_respostas_locais.py]
+    subgraph ia [IA e motoristas]
+        ContextoMD[CONTEXTO_IA.md]
         ContextoPy[groq_contexto.py]
+        Conteudo[groq_conteudo.py]
+        Rotas[groq_rotas.py Guia Motoristas]
+        Perguntas[groq_perguntas.py Chat]
+        Locais[groq_respostas_locais.py]
+        Groq[Groq API ou fallback local]
     end
 
-    subgraph saida [Saída]
+    subgraph evidencias [Evidencias offline]
+        Bench[benchmark_comparativo.py]
+        Exp[experimentos_ag.py]
+    end
+
+    subgraph saida [Saida]
         Arquivo[melhor_rota.txt]
-        Results[results/ benchmarks]
+        Results[results/]
     end
 
-    ConfigUI --> Config
-    Cidades --> DadosH
-    DadosH --> Nomes & Tipos
-    Deposito --> Fitness
-    Nomes --> Dash
-    Tipos --> Fitness
-    Config --> Runner
-    DadosH --> Pop
-    Pop --> Fitness --> Sel --> Conv
+    ConfigUI --> TSP
+    Config --> TSP
+    DadosH --> TSP
+
+    TSP --> Runner
+    Runner --> GA
     Runner --> Pygame
-    Runner --> Comp & Exp
-    Heur --> Comp
-    Conv --> Dash
-    Conv --> Conteudo
-    ContextoPy --> Contexto
-    Utils --> Conteudo
-    Conteudo --> Dash
-    Rotas --> Dash
-    Chat --> Local
-    Local --> Dash
-    Chat --> Dash
-    Comp --> Results
-    Exp --> Results
+
+    TSP --> Priorizar
+    Priorizar --> Metricas
+    Metricas --> Dashboard
+    Pygame --> Dashboard
+
+    ContextoPy --> ContextoMD
+    TSP --> Conteudo
+    ContextoPy --> Conteudo
+    Conteudo --> Groq
+    Conteudo --> Dashboard
+
+    TSP --> Rotas
+    Rotas --> Dashboard
+
+    Dashboard --> Perguntas
+    Perguntas --> Locais
+    Locais --> Perguntas
+    ContextoPy --> Perguntas
+    Perguntas --> Groq
+
     Conteudo --> Arquivo
+    Rotas --> Arquivo
+    Metricas --> Arquivo
+
+    Runner --> Bench
+    Runner --> Exp
+    Bench --> Results
+    Exp --> Results
 ```
+
+**Legenda rápida:** `groq_conteudo.py` gera análise e relatórios (1 chamada Groq, 3 seções). `groq_rotas.py` monta o **Guia Motoristas** localmente. O chat tenta `groq_respostas_locais.py` antes da API.
 
 ## Fluxo de execução
 
