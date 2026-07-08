@@ -220,7 +220,6 @@ O arquivo `docs/CONTEXTO_IA.md` é carregado automaticamente nos prompts da Groq
 | Configuração interativa + resumo de pedidos | `config_ui.py` |
 | Testes automatizados | `tests/test_projeto.py` (88) — ver `tests/README.md` |
 | Documentação e diagrama | `docs/` |
-| Relatório técnico / vídeo demo | A entregar pelo grupo |
 
 ## Licença
 
