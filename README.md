@@ -55,8 +55,8 @@ flowchart TB
         Conteudo[groq_conteudo.py]
         Rotas[groq_rotas.py Guia Motoristas]
         Perguntas[groq_perguntas.py Chat]
-        Locais[groq_respostas_locais.py]
-        Groq[Groq API ou fallback local]
+        Locais[groq_respostas_locais.py Guia]
+        Groq[Groq API]
     end
 
     subgraph evidencias [Evidencias offline]
@@ -89,11 +89,10 @@ flowchart TB
     Conteudo --> Dashboard
 
     TSP --> Rotas
-    Rotas --> Dashboard
+    Rotas --> Locais
+    Locais --> Dashboard
 
     Dashboard --> Perguntas
-    Perguntas --> Locais
-    Locais --> Perguntas
     ContextoPy --> Perguntas
     Perguntas --> Groq
 
@@ -109,7 +108,7 @@ flowchart TB
 
 - **Groq:** 1 chamada para análise + relatórios (`groq_conteudo.py`)
 - **Guia Motoristas:** montado localmente (`groq_rotas.py`)
-- **Chat:** respostas locais primeiro (`groq_respostas_locais.py`), depois Groq se necessário
+- **Chat:** todas as respostas via Groq (`groq_perguntas.py`) — conversa natural, sem templates fixos
 
 Detalhes dos módulos: [docs/ARQUITETURA.md](docs/ARQUITETURA.md)
 
@@ -145,10 +144,10 @@ Se a cota diária da Groq esgotar (erro 429), o sistema **não interrompe** — 
 ## Como executar
 
 ```bash
-python tsp.py
+python src/tsp.py
 ```
 
-> `tsp.py` é o ponto de entrada do fluxo VRP hospitalar (nome histórico do arquivo principal).
+> Ponto de entrada em `src/tsp.py` — orquestra simulação VRP + painel.
 
 Fluxo completo:
 
@@ -208,8 +207,8 @@ Marque **Importar pedidos de arquivo CSV** na janela de configuração.
 ### Scripts sem interface (benchmarks)
 
 ```bash
-python benchmark_comparativo.py   # AG vs heurísticas → results/
-python experimentos_ag.py         # 3 configs do AG → results/
+python src/genetic_algorithm_tsp/benchmark_comparativo.py   # AG vs heurísticas → results/
+python src/genetic_algorithm_tsp/experimentos_ag.py         # 3 configs do AG → results/
 ```
 
 Usam apenas `config.py` (sem janela gráfica).
@@ -217,46 +216,51 @@ Usam apenas `config.py` (sem janela gráfica).
 ## Testes automatizados
 
 ```bash
-py -m pytest tests/test_projeto.py -v
+py -m pytest src/tests/test_projeto.py -v
 ```
 
-**88 testes** — config, modo fixo, AG/VRP, chat local, dashboard, IA (fallback) e regressão de bugs de demo.
+**85 testes** — config, modo fixo, AG/VRP, chat Groq, dashboard, IA (fallback) e regressão de bugs de demo.
 
-Guia do que cada teste faz: [`tests/README.md`](tests/README.md)  
-Cenários reutilizáveis (modo fixo vs textos simulados): [`tests/fixtures_dados.py`](tests/fixtures_dados.py)
+Guia do que cada teste faz: [`src/tests/README.md`](src/tests/README.md)  
+Cenários reutilizáveis (modo fixo vs textos simulados): [`src/tests/fixtures_dados.py`](src/tests/fixtures_dados.py)
 
 ## Estrutura do projeto
 
 ```
-config.py              # Parâmetros padrão, unidade de carga, opções de frota
-config_ui.py           # Janela de config + resumo de pedidos
-dados_hospitalares.py  # Nomes, tipos, demandas, CSV, viabilidade, priorização por capacidade
-genetic_algorithm.py   # AG, fitness VRP, restrições, depósito
-ag_runner.py           # Execução do AG (reutilizável)
-heuristics.py          # Heurísticas para comparativo
-metricas_benchmark.py  # Métricas AG vs heurísticas vs ótimo (aba Análise)
-benchmark_comparativo.py
-experimentos_ag.py
-tsp.py                 # Ponto de entrada — orquestra simulação VRP + painel
-dashboard_ui.py        # Painel com 7 abas (cabeçalho enxuto) e chat
-draw_functions.py      # Pygame (gráfico + mapa)
-groq_conteudo.py       # Análise + relatórios (1 chamada API, 3 seções)
-groq_rotas.py          # Guia Motoristas — rota passo a passo (local)
-groq_contexto.py       # Carrega docs/CONTEXTO_IA.md nos prompts
-groq_utils.py          # Cliente Groq, fallback e .env
-groq_respostas_locais.py # Respostas locais do chat
-groq_*.py              # Fallbacks por módulo
-exemplos/              # CSV de exemplo + capturas de tela do fluxo
-tests/                 # Suite de testes (ver tests/README.md)
+src/
+  tsp.py                          # Ponto de entrada — simulação VRP + painel
+  config/config.py                # Parâmetros padrão, unidade de carga, frota
+  ui/
+    config_ui.py                  # Janela de config + resumo de pedidos
+    dashboard_ui.py               # Painel com 7 abas e chat
+    draw_functions.py             # Pygame (gráfico + mapa)
+  genetic_algorithm_tsp/
+    genetic_algorithm.py          # AG, fitness VRP, restrições, depósito
+    ag_runner.py                  # Execução do AG (reutilizável)
+    dados_hospitalares.py         # Nomes, tipos, demandas, CSV, priorização
+    heuristics.py                 # Heurísticas para comparativo
+    metricas_benchmark.py         # Métricas AG vs heurísticas vs ótimo
+    benchmark_comparativo.py
+    experimentos_ag.py
+  llm/
+    groq_conteudo.py              # Análise + relatórios (1 chamada API)
+    groq_rotas.py                 # Guia Motoristas — rota passo a passo
+    groq_contexto.py              # Carrega docs/CONTEXTO_IA.md
+    groq_utils.py                 # Cliente Groq, fallback e .env
+    groq_respostas_locais.py      # Guia Motoristas (aba Instruções, não é o chat)
+    groq_*.py                     # Fallbacks por módulo
+  tests/                          # Suite de testes (ver src/tests/README.md)
+exemplos/                         # CSV de exemplo + capturas de tela do fluxo
 docs/
-  VISAO_GERAL_SISTEMA.md   # Visão do sistema para a equipe
-  ARQUITETURA.md           # Diagrama e módulos
-  EVIDENCIAS_EXPERIMENTAIS.md  # Benchmarks e relatório técnico
-  CONTEXTO_IA.md           # Regras fixas nos prompts Groq (não é doc de leitura)
-results/               # Gerado localmente (gitignored)
+  VISAO_GERAL_SISTEMA.md
+  ARQUITETURA.md
+  EVIDENCIAS_EXPERIMENTAIS.md
+  CONTEXTO_IA.md                  # Regras fixas nos prompts Groq
+results/                          # Gerado localmente (gitignored)
+melhor_rota.txt                   # Gerado ao rodar src/tsp.py (gitignored)
 ```
 
-## Configuração (`config.py`)
+## Configuração (`src/config/config.py`)
 
 Parâmetros técnicos e padrões da janela. Obrigatório para scripts de benchmark.
 
@@ -284,9 +288,9 @@ Após cada simulação, o painel exibe:
 | **Comparativo (km)** | AG, rota aleatória, vizinho mais próximo, greedy por prioridade, ótimo VRP* |
 | **Relativo ao AG** | Economia em km e % vs cada método; diferença vs ótimo quando calculado |
 
-O mesmo bloco é gravado em `melhor_rota.txt` ao final de cada simulação (`python tsp.py`).
+O mesmo bloco é gravado em `melhor_rota.txt` ao final de cada simulação (`python src/tsp.py`).
 
-\*Ótimo só com **≤ 6 entregas**, **≤ 6 veículos** e veículos ≤ entregas. Script completo: `python benchmark_comparativo.py`.
+\*Ótimo só com **≤ 6 entregas**, **≤ 6 veículos** e veículos ≤ entregas. Script completo: `python src/genetic_algorithm_tsp/benchmark_comparativo.py`.
 
 ## Documentação
 
@@ -310,7 +314,7 @@ O arquivo `docs/CONTEXTO_IA.md` é carregado automaticamente nos prompts da Groq
 | LLM: instruções, relatórios, melhorias | Análise/relatórios via Groq; guia motoristas local |
 | Chat em linguagem natural | Implementado |
 | Configuração interativa + resumo de pedidos | `config_ui.py` |
-| Testes automatizados | `tests/test_projeto.py` (88) — ver `tests/README.md` |
+| Testes automatizados | `src/tests/test_projeto.py` (85) — ver `src/tests/README.md` |
 | Documentação e diagrama | `docs/` |
 | Relatório técnico / vídeo demo | A entregar pelo grupo |
 

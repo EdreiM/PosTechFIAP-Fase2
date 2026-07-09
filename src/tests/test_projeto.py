@@ -13,16 +13,8 @@ Mapa rápido:
   TestRegressaoBugsUsuario      → bugs de demo real (18 entregas)
 
 Execute:
-  py -m pytest tests/test_projeto.py -v
+  py -m pytest src/tests/test_projeto.py -v
 """
-
-import sys
-from pathlib import Path
-
-# Permite importar módulos da raiz ao rodar direto: python tests/test_projeto.py
-_RAIZ = Path(__file__).resolve().parents[1]
-if str(_RAIZ) not in sys.path:
-    sys.path.insert(0, str(_RAIZ))
 
 import math
 import random
@@ -57,6 +49,7 @@ from dados_hospitalares import (
 )
 
 from tests.fixtures_dados import (
+    CHAT_V2_38_VEICULOS,
     CHAT_V2_ROTAS,
     CHAT_V2_VEICULOS,
     CHAT_V3_ROTAS,
@@ -597,7 +590,13 @@ class TestGroqUtils:
         assert "kit" in ctx.lower()
 
     def test_historico_conversa_no_prompt(self, monkeypatch):
-        monkeypatch.setenv("GROQ_DESABILITADO", "1")
+        prompts: list[str] = []
+
+        def _fake(prompt, fallback, *, temperature=0.2, system=None):
+            prompts.append(prompt)
+            return "O veículo 2 percorreu 865 km."
+
+        monkeypatch.setattr("groq_perguntas.chamar_llm", _fake)
         from groq_perguntas import responder_pergunta
 
         historico = [("Qual veículo tem maior carga?", "Veículo 2 com 72 kits.")]
@@ -612,7 +611,41 @@ class TestGroqUtils:
             "Instruções teste",
             historico_conversa=historico,
         )
-        assert "72" in texto or "865" in texto or "Veículo 2" in texto
+        assert "865" in texto
+        assert "Qual veículo tem maior carga?" in prompts[0]
+
+    def test_prompt_inclui_analise_benchmark_e_guia(self, monkeypatch):
+        prompts: list[str] = []
+
+        def _capturar(prompt, fallback, *, temperature=0.2, system=None):
+            prompts.append(prompt)
+            return "ok"
+
+        monkeypatch.setattr("groq_perguntas.chamar_llm", _capturar)
+        from groq_perguntas import responder_pergunta
+
+        responder_pergunta(
+            "Como foi o desempenho do AG?",
+            "Veículo 1 | 2 entregas | carga 20/40",
+            "Resumo rota",
+            "Ordem paradas",
+            "TEXTO_ANALISE_AG",
+            "TEXTO_RELATORIO_DIA",
+            "TEXTO_RELATORIO_SEM",
+            "TEXTO_GUIA_MOTORISTAS",
+            texto_benchmark="TEXTO_BENCHMARK_METRICAS",
+            texto_parametros_ag="População: 100",
+            texto_resumo_semanal_projecao="Projeção 5 dias",
+            texto_entregas_coordenadas="1. UTI (10,20)",
+        )
+        assert len(prompts) == 1
+        corpo = prompts[0]
+        assert "TEXTO_ANALISE_AG" in corpo
+        assert "TEXTO_BENCHMARK_METRICAS" in corpo
+        assert "TEXTO_GUIA_MOTORISTAS" in corpo
+        assert "TEXTO_RELATORIO_DIA" in corpo
+        assert "MÉTRICAS E BENCHMARK" in corpo
+        assert "GUIA PARA MOTORISTAS" in corpo
 
 
 class TestGroqConteudo:
@@ -680,8 +713,8 @@ Texto instruções.
         assert "Conteúdo real" in _limpar_secao(texto)
 
 
-class TestGroqRespostasLocais:
-    """Chat local — usa CHAT_V2_* e CHAT_V3_* de tests/fixtures_dados.py."""
+class TestGroqGuiaMotoristas:
+    """Guia da aba Instruções (groq_rotas) — não é o chat do painel."""
 
     def test_instrucoes_veiculo_local_prioridade_correta(self):
         from groq_respostas_locais import gerar_instrucoes_veiculo_local
@@ -692,144 +725,75 @@ class TestGroqRespostasLocais:
         assert "Hemodiálise 15 (p4)" not in texto
         assert "Siga a ordem" in texto or "Trajetória" in texto
 
-    def test_chat_usa_resposta_local(self):
+
+class TestGroqChat:
+    """Chat do painel — sempre via Groq, sem templates locais."""
+
+    def test_chat_sempre_chama_groq(self, monkeypatch):
+        capturado: dict = {}
+
+        def _fake_groq(prompt, fallback, *, temperature=0.2, system=None):
+            capturado["prompt"] = prompt
+            capturado["temperature"] = temperature
+            capturado["system"] = system
+            return "Hoje temos 4 entregas críticas na operação."
+
+        monkeypatch.setattr("groq_perguntas.chamar_llm", _fake_groq)
         from groq_perguntas import responder_pergunta
 
         resposta = responder_pergunta(
-            "Eu to no veículo 3 me dá as instruções das entregas",
-            CHAT_V3_VEICULOS,
-            "resumo",
-            CHAT_V3_ROTAS,
-            "a", "r", "s", "i",
-        )
-        assert "Veículo 3" in resposta
-        assert "79/80" in resposta
-        assert "Unidade Domiciliar 11" in resposta
-
-    def test_chat_motorista_carro_trajetoria(self):
-        from groq_perguntas import responder_pergunta
-
-        resposta = responder_pergunta(
-            "Eu sou o motorista do carro 2 qual a trajetoria devo seguir?",
-            CHAT_V2_VEICULOS,
-            "resumo",
-            CHAT_V2_ROTAS,
-            "", "", "", "",
-        )
-        assert "Instruções" in resposta or "Trajetória" in resposta or "Motorista" in resposta
-        assert "Veículo 2" in resposta
-        assert "Farmácia Central" in resposta
-        assert "UTI Norte" in resposta
-        assert "Lab. Análises" in resposta
-        assert "Hospital Central" in resposta
-        assert "3 entrega(s) (38/40" not in resposta
-
-    def test_chat_remanescentes_hospital(self):
-        from groq_perguntas import responder_pergunta
-
-        remanescentes = (
-            "KITS REMANESCENTES NO HOSPITAL CENTRAL\n"
-            "  • Lab. Análises [INSUMO] (2 prioridade, 28 kits)"
-        )
-        resposta = responder_pergunta(
-            "O que ficou no hospital?",
+            "Quantos criticos entregues?",
             CHAT_V3_VEICULOS,
             "resumo",
             CHAT_V3_ROTAS,
             "", "", "", "",
-            texto_remanescentes=remanescentes,
         )
-        assert "hospital" in resposta.lower()
-        assert "Lab" in resposta or "REMESCENTES" in resposta.upper()
+        assert resposta == "Hoje temos 4 entregas críticas na operação."
+        assert capturado["temperature"] == 0.7
+        assert "INTERPRETAR" in capturado["system"]
+        assert "memória interna" in capturado["prompt"]
 
-    def test_chat_medicamentos_por_tipo(self):
-        from dados_hospitalares import montar_entregas_por_tipo
+    def test_chat_prompt_inclui_todos_os_blocos(self, monkeypatch):
+        prompts: list[str] = []
+
+        def _fake_groq(prompt, fallback, *, temperature=0.2, system=None):
+            prompts.append(prompt)
+            return "ok"
+
+        monkeypatch.setattr("groq_perguntas.chamar_llm", _fake_groq)
         from groq_perguntas import responder_pergunta
 
-        cities = configurar_cenario_fixo(5)
-        por_tipo = montar_entregas_por_tipo(cities)
-
-        resposta = responder_pergunta(
-            "Quais medicamentos temos entregues?",
-            CHAT_V3_VEICULOS,
-            "Tipos: CRITICO=2 | REGULAR=2 | INSUMO=1",
-            CHAT_V3_ROTAS,
-            "", "", "", "",
-            texto_entregas_por_tipo=por_tipo,
+        responder_pergunta(
+            "Como foi o AG?",
+            "Veículo 1 | 2 entregas",
+            "Resumo rota",
+            "Ordem paradas",
+            "TEXTO_ANALISE",
+            "TEXTO_RELATORIO_DIA",
+            "TEXTO_RELATORIO_SEM",
+            "TEXTO_GUIA_MOTORISTAS",
+            texto_benchmark="TEXTO_BENCHMARK",
+            texto_parametros_ag="População: 100",
         )
-        assert "CRITICO" in resposta
-        assert "REGULAR" in resposta
-        assert "INSUMO" in resposta
-        assert "dipirona" not in resposta.lower()
-        assert "UTI Norte" in resposta or "categorias de kits" in resposta
+        corpo = prompts[0]
+        assert "TEXTO_ANALISE" in corpo
+        assert "TEXTO_BENCHMARK" in corpo
+        assert "TEXTO_GUIA_MOTORISTAS" in corpo
 
-    def test_chat_cargas_veiculo_local(self):
+    def test_fallback_indisponivel_sem_dump_de_dados(self, monkeypatch):
+        monkeypatch.setenv("GROQ_DESABILITADO", "1")
         from groq_perguntas import responder_pergunta
 
         resposta = responder_pergunta(
-            "Quantas cargas o veículo 2 levou?",
+            "Quantos kits o veículo 2 entregou?",
             CHAT_V2_VEICULOS,
             "resumo",
             CHAT_V2_ROTAS,
             "", "", "", "",
         )
-        assert "Veículo 2" in resposta
-        assert "3 entrega" in resposta
-        assert "34" in resposta
-        assert "kits" in resposta
-
-    def test_chat_quantas_de_cada_mantem_contexto_veiculo(self):
-        from groq_perguntas import responder_pergunta
-
-        historico = [
-            (
-                "Quantas cargas o veículo 2 levou?",
-                "Veículo 2: 3 entrega(s) (34/40 kits no total).",
-            ),
-        ]
-        resposta = responder_pergunta(
-            "Quantas de cada?",
-            CHAT_V2_VEICULOS,
-            "resumo",
-            CHAT_V2_ROTAS,
-            "", "", "", "",
-            historico_conversa=historico,
-        )
-        assert "Veículo 2" in resposta
-        assert "CRITICO: 2 entrega" in resposta
-        assert "REGULAR: 1 entrega" in resposta
-        assert "INSUMO: 0 entrega" in resposta
-        assert "Farmácia Central" in resposta
-        assert "UTI Norte" in resposta
-        assert "Maternidade" not in resposta
-
-    def test_chat_explica_funcionamento_kits(self):
-        from groq_perguntas import responder_pergunta
-
-        historico = [
-            (
-                "Quantas cargas o veículo 2 levou?",
-                "Veículo 2: 3 entrega(s) (38/40 kits no total).",
-            ),
-        ]
-        resumo = (
-            "Pedidos do dia: 15 | Capacidade/veículo: 40 kits | "
-            "Autonomia/veículo: 1500 km"
-        )
-        resposta = responder_pergunta(
-            "Como funciona a quantidade de kits por carga?",
-            CHAT_V2_VEICULOS,
-            resumo,
-            CHAT_V2_ROTAS,
-            "", "", "", "",
-            historico_conversa=historico,
-        )
-        assert "1 kit" in resposta
-        assert "demanda" in resposta.lower()
-        assert "capacidade" in resposta.lower()
-        assert "veículo 2" in resposta.lower()
-        assert "Veículo 1:" not in resposta
-        assert "Veículo 3:" not in resposta
+        assert "indisponível" in resposta.lower() or "GROQ" in resposta.lower()
+        assert "3 entrega(s)" not in resposta
+        assert "Veículos:" not in resposta
 
 
 # =============================================================================
@@ -1075,15 +1039,12 @@ class TestRegressaoBugsUsuario:
     """Falhas encontradas em teste manual que os testes genéricos não pegavam."""
 
     def test_pergunta_exata_veiculo_3_instrucoes(self):
-        from groq_perguntas import responder_pergunta
+        from groq_rotas import montar_instrucoes_motoristas
         from tests.validadores_ia import assert_instrucoes_veiculo_coerentes
 
-        resposta = responder_pergunta(
-            "Eu to no veículo 3 me dá as instruções das entregas",
+        resposta = montar_instrucoes_motoristas(
             REGRESSAO_18_VEICULOS,
-            "Capacidade/veículo: 80 kits",
             REGRESSAO_18_ROTAS,
-            "", "", "", "",
         )
         assert_instrucoes_veiculo_coerentes(resposta, 3, capacidade=80)
         assert "1." in resposta and "5." in resposta

@@ -1,14 +1,25 @@
 """
 Comparativo de desempenho: AG vs heurísticas clássicas.
 
-Executar: python benchmark_comparativo.py
+Executar: python src/genetic_algorithm_tsp/benchmark_comparativo.py
 Saída: results/benchmark_comparativo.txt (+ CSV)
 """
 
 import csv
 import math
 import os
+import sys
 import time
+from pathlib import Path
+
+_SRC = Path(__file__).resolve().parents[1]
+_RAIZ_PROJETO = _SRC.parent
+for _pasta in ("config", "ui", "llm", "genetic_algorithm_tsp"):
+    _caminho = str(_SRC / _pasta)
+    if _caminho not in sys.path:
+        sys.path.insert(0, _caminho)
+if str(_SRC) not in sys.path:
+    sys.path.insert(0, str(_SRC))
 
 import genetic_algorithm as ga
 from ag_runner import executar_ag
@@ -35,7 +46,7 @@ from heuristics import (
     rota_aleatoria,
 )
 
-RESULTS_DIR = "results"
+RESULTS_DIR = str(_RAIZ_PROJETO / "results")
 
 
 def configurar_dados(cities):

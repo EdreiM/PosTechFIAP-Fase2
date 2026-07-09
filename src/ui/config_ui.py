@@ -297,9 +297,12 @@ def abrir_configuracao() -> ParametrosSimulacao:
     entry_csv.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
     def buscar_csv():
+        from pathlib import Path
+
         caminho = filedialog.askopenfilename(
             title="Selecionar pedidos (CSV)",
             filetypes=[("CSV", "*.csv"), ("Todos", "*.*")],
+            initialdir=str(Path(__file__).resolve().parents[2] / "exemplos"),
         )
         if caminho:
             var_csv_path.set(caminho)

@@ -1,3 +1,15 @@
+import sys
+from pathlib import Path
+
+_SRC = Path(__file__).resolve().parent
+_RAIZ_PROJETO = _SRC.parent
+for _pasta in ("config", "ui", "llm", "genetic_algorithm_tsp"):
+    _caminho = str(_SRC / _pasta)
+    if _caminho not in sys.path:
+        sys.path.insert(0, _caminho)
+if str(_SRC) not in sys.path:
+    sys.path.insert(0, str(_SRC))
+
 import pygame
 from pygame.locals import *
 import random
@@ -55,8 +67,6 @@ from draw_functions import (
     desenhar_fundo_paineis,
     draw_mapa_projecao,
 )
-import sys
-
 from ag_runner import executar_ag
 from groq_conteudo import gerar_conteudo_completo
 from groq_perguntas import responder_pergunta
@@ -620,6 +630,41 @@ texto_resumo_semanal = (
     f"Kits remanescentes no hospital (por dia): {kits_remanescentes_hospital}"
 )
 
+texto_benchmark_chat = montar_bloco_analise_metricas(metricas_comparativo)
+
+texto_entregas_coordenadas = (
+    "Entregas na rota otimizada (ordem global, coordenadas no mapa, veículo):\n"
+    + "\n".join(
+        f"  {item['ordem']}. {item['nome']} [{item['tipo']}] "
+        f"p{item['prioridade']} {item['demanda']} kits → Veículo {item['veiculo']} "
+        f"({item['x']:.0f}, {item['y']:.0f})"
+        for item in rota_detalhada
+    )
+)
+
+texto_parametros_ag = (
+    f"População: {POPULATION_SIZE}\n"
+    f"Gerações configuradas: {N_GENERATIONS}\n"
+    f"Geração de convergência: {geracao_convergencia}\n"
+    f"Taxa de mutação: {MUTATION_PROBABILITY}\n"
+    f"Limite sem melhora: {LIMITE_SEM_MELHORA}\n"
+    f"Entregas pedidas: {params.n_cidades} ({params.modo_cidades})\n"
+    f"Entregas efetivas na rota: {len(rota_detalhada)}\n"
+    f"Veículos: {num_veiculos}\n"
+    f"Seed: {seed_execucao}\n"
+    f"Capacidade/veículo: {capacidade_veiculo} kits\n"
+    f"Autonomia/veículo: {distancia_maxima_veiculo} km\n"
+    f"Depósito: Hospital Central {DEPOT}\n"
+    f"Tipos no pedido: CRITICO={contagem_tipos['CRITICO']} | "
+    f"REGULAR={contagem_tipos['REGULAR']} | INSUMO={contagem_tipos['INSUMO']}\n"
+    f"Fitness inicial: {fitness_inicial:.2f}\n"
+    f"Distância inicial: {distancia_inicial:.2f} km\n"
+    f"Melhoria fitness: {melhoria_prioridade:.2f}%\n"
+    f"Melhoria distância: {melhoria_distancia:.2f}%"
+)
+if params.arquivo_csv:
+    texto_parametros_ag += f"\nCSV de pedidos: {params.arquivo_csv}"
+
 conteudo_ia = gerar_conteudo_completo(
     fitness_inicial=fitness_inicial,
     fitness_final=fitness_final,
@@ -653,7 +698,7 @@ print("Conteúdo gerado. Abrindo painel com abas...")
 
 # Salva o resultado em arquivo texto
 
-with open("melhor_rota.txt", "w", encoding="utf-8") as arquivo:
+with open(_RAIZ_PROJETO / "melhor_rota.txt", "w", encoding="utf-8") as arquivo:
 
     arquivo.write("RESULTADOS DO ALGORITMO GENÉTICO\n")
 
@@ -754,6 +799,10 @@ def _responder_pergunta_chat(pergunta, historico_conversa=None):
         texto_entregas_por_tipo=texto_entregas_por_tipo,
         texto_remanescentes=texto_remanescentes,
         historico_conversa=historico_conversa,
+        texto_benchmark=texto_benchmark_chat,
+        texto_parametros_ag=texto_parametros_ag,
+        texto_resumo_semanal_projecao=texto_resumo_semanal,
+        texto_entregas_coordenadas=texto_entregas_coordenadas,
     )
 
 

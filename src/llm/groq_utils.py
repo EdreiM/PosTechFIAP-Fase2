@@ -6,8 +6,8 @@ from typing import Callable, Optional
 
 from dotenv import load_dotenv
 
-_RAIZ = Path(__file__).resolve().parent
-load_dotenv(_RAIZ / ".env", override=True)
+_RAIZ_PROJETO = Path(__file__).resolve().parents[2]
+load_dotenv(_RAIZ_PROJETO / ".env", override=True)
 
 _client = None
 _chave_carregada: Optional[str] = None
@@ -62,7 +62,13 @@ def _formatar_erro_groq(exc: Exception) -> str:
     return mensagem[:200] if mensagem else nome
 
 
-def chamar_llm(prompt: str, fallback: Callable[[], str], *, temperature: float = 0.2) -> str:
+def chamar_llm(
+    prompt: str,
+    fallback: Callable[[], str],
+    *,
+    temperature: float = 0.2,
+    system: Optional[str] = None,
+) -> str:
     """Chama a Groq; em falha ou sem chave, retorna texto gerado localmente."""
     global _erro_ultima_chamada
 
@@ -77,10 +83,15 @@ def chamar_llm(prompt: str, fallback: Callable[[], str], *, temperature: float =
         print(f"[IA] {_erro_ultima_chamada} Usando texto local.")
         return fallback()
 
+    mensagens = []
+    if system and system.strip():
+        mensagens.append({"role": "system", "content": system.strip()})
+    mensagens.append({"role": "user", "content": prompt})
+
     try:
         resposta = cliente.chat.completions.create(
             model=MODELO_GROQ,
-            messages=[{"role": "user", "content": prompt}],
+            messages=mensagens,
             temperature=temperature,
         )
         _erro_ultima_chamada = None

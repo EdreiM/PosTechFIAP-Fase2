@@ -434,7 +434,7 @@ def abrir_dashboard(
 
     adicionar_mensagem(
         "Sistema",
-        "Pergunte sobre rotas, veículos, capacidade ou prioridades.",
+        "Olá! Pergunte o que precisar sobre rotas, veículos, kits ou a operação de hoje.",
     )
 
     def ao_receber_resposta(pergunta, resposta):

@@ -9,7 +9,7 @@ Documento de apoio ao **relatório técnico** com instruções para reproduzir c
 ### Comparativo AG vs heurísticas
 
 ```bash
-python benchmark_comparativo.py
+python src/genetic_algorithm_tsp/benchmark_comparativo.py
 ```
 
 **Saída:**
@@ -32,7 +32,7 @@ python benchmark_comparativo.py
 ### Três experimentos com configurações do AG
 
 ```bash
-python experimentos_ag.py
+python src/genetic_algorithm_tsp/experimentos_ag.py
 ```
 
 **Saída:**
@@ -42,7 +42,7 @@ python experimentos_ag.py
 | `results/experimentos_ag.txt` | Resumo dos 3 experimentos |
 | `results/experimentos_convergencia.png` | Gráfico de convergência sobreposto |
 
-**Configurações (definidas em `config.py` → `EXPERIMENTOS_AG`):**
+**Configurações (definidas em `src/config/config.py` → `EXPERIMENTOS_AG`):**
 
 | Experimento | População | Mutação | Gerações | Objetivo |
 |-------------|-----------|---------|----------|----------|
@@ -57,11 +57,11 @@ python experimentos_ag.py
 ### Unidade de carga
 
 - **1 kit de medicamentos** = 1 caixa/kits fechados pela farmácia (`config.UNIDADE_MEDIDA`)
-- Capacidade por veículo: **40, 60 ou 80 kits** (janela de configuração; valores usados na exibição vêm da UI, não do padrão fixo do `config.py`)
+- Capacidade por veículo: **40, 60 ou 80 kits** (janela de configuração; valores usados na exibição vêm da UI, não do padrão fixo do `src/config/config.py`)
 
 ### Depósito
 
-- Coordenada: `DEPOT = (400, 200)` em `config.py`
+- Coordenada: `DEPOT = (400, 200)` em `src/config/config.py`
 - Todos os veículos saem e retornam ao **Hospital Central** (marcado como **H** no mapa)
 - Distância calculada: `depósito → entregas → depósito`
 
@@ -97,7 +97,7 @@ Configuração: `configurar_cenario()` ou CSV via `parse_pedidos_csv()`.
 | **Tempo** | Segundos de execução |
 | **Conv.** | Geração de convergência (só AG) |
 
-No fluxo interativo (`python tsp.py`), as mesmas métricas aparecem na **aba Análise** do painel e no arquivo **`melhor_rota.txt`** (módulo `metricas_benchmark.py`).
+No fluxo interativo (`python src/tsp.py`), as mesmas métricas aparecem na **aba Análise** do painel e no arquivo **`melhor_rota.txt`** (módulo `metricas_benchmark.py`).
 
 ---
 
@@ -118,7 +118,7 @@ No fluxo interativo (`python tsp.py`), as mesmas métricas aparecem na **aba An�
 ### Seção: Realismo hospitalar
 
 1. Descrição do depósito e tipos de entrega
-2. Exemplo de entradas (saída de `python tsp.py` — seção ENTREGAS HOSPITALARES)
+2. Exemplo de entradas (saída de `python src/tsp.py` — seção ENTREGAS HOSPITALARES)
 3. Mapa do painel com H = Hospital e cores por tipo
 4. Relatório semanal: deixar claro na banca que é **projeção** (1 dia × 5), conforme indicado no próprio relatório gerado
 
@@ -136,11 +136,11 @@ Modelo padrão: `llama-3.1-8b-instant` (Groq). Contexto fixo em `docs/CONTEXTO_I
 
 Todos os scripts usam:
 
-- `SEED = 42` em `config.py`
+- `SEED = 42` em `src/config/config.py`
 - `MODO_CIDADES = "fixo"` com `N_CIDADES = 15` (padrão)
 - Mesma função `configurar_cenario()` para dados idênticos entre execuções
 
-Para testar com outro cenário, altere apenas `config.py` e rode os três comandos novamente.
+Para testar com outro cenário, altere apenas `src/config/config.py` e rode os três comandos novamente.
 
 ---
 

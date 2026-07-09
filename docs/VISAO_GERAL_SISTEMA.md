@@ -53,8 +53,8 @@ config.py + dados_hospitalares (demandas fixas ou CSV)
 **Scripts adicionais (sem Pygame/LLM):**
 
 ```bash
-python benchmark_comparativo.py   # AG vs heurísticas → results/
-python experimentos_ag.py         # 3 configs do AG → results/
+python src/genetic_algorithm_tsp/benchmark_comparativo.py   # AG vs heurísticas → results/
+python src/genetic_algorithm_tsp/experimentos_ag.py         # 3 configs do AG → results/
 ```
 
 ---
@@ -74,7 +74,7 @@ python experimentos_ag.py         # 3 configs do AG → results/
 
 ## 3.1 Janela de configuração — `config_ui.py`
 
-Abre **antes** do Pygame quando você roda `python tsp.py`:
+Abre **antes** do Pygame quando você roda `python src/tsp.py`:
 
 | Campo | Descrição |
 |-------|-----------|
@@ -154,7 +154,7 @@ Ver [EVIDENCIAS_EXPERIMENTAIS.md](EVIDENCIAS_EXPERIMENTAIS.md) para uso no relat
 | `groq_conteudo.py` | **1 chamada** gera análise + relatório diário + semanal (3 seções LLM) |
 | `groq_rotas.py` | **Guia Motoristas** — montado localmente a partir das rotas (aba do painel) |
 | `groq_perguntas.py` | Chat com histórico (últimos 6 turnos) |
-| `groq_respostas_locais.py` | Chat **local** (sem Groq): instruções, trajetória do motorista, carga por veículo, tipos, kits, remanescentes |
+| `groq_respostas_locais.py` | Guia Motoristas (aba Instruções) — montagem local, não é o chat |
 | `groq_analysis.py`, etc. | Fallbacks locais por módulo (textos enxutos, sem repetir métricas da aba Análise) |
 
 Capacidade/autonomia nos prompts vêm dos **dados da execução** (ex.: 80 kits), não de valores fixos do `config.py`.
@@ -177,24 +177,24 @@ Abas após a simulação:
 | **Relatório Diário** | Fechamento do dia (sem repetir tabela de métricas) |
 | **Relatório Semanal** | Projeção × 5 dias úteis |
 | **Guia Motoristas** | Rota passo a passo por veículo (`groq_rotas.montar_instrucoes_motoristas`) — linguagem direta para quem dirige |
-| **Chat** | Perguntas em linguagem natural (respostas locais ou Groq) |
+| **Chat** | Perguntas em linguagem natural — sempre via Groq (`groq_perguntas.py`) |
 
 \*Ótimo VRP só com ≤ 6 entregas e ≤ 6 veículos.
 
 A **evolução do fitness** aparece na simulação **Pygame** (gráfico à esquerda), não no painel.
 
-O **chat** prioriza `groq_respostas_locais.py` para: instruções/trajetória (`carro 2`, `motorista`), carga por veículo, `quantas de cada?` (com histórico), explicação de kits/capacidade, medicamentos por tipo e remanescentes.
+O **chat** do painel usa sempre a **Groq** (`groq_perguntas.py`) com todos os dados da execução — respostas em linguagem natural, sem templates fixos.
 
 ---
 
 ## 8. Testes — `tests/`
 
 ```bash
-py -m pytest tests/test_projeto.py -v
+py -m pytest src/tests/test_projeto.py -v
 ```
 
-Guia completo: [`tests/README.md`](../tests/README.md)  
-Cenários reutilizáveis: [`tests/fixtures_dados.py`](../tests/fixtures_dados.py)
+Guia completo: [`src/tests/README.md`](../src/tests/README.md)  
+Cenários reutilizáveis: [`src/tests/fixtures_dados.py`](../src/tests/fixtures_dados.py)
 
 | Classe | Cobertura |
 |--------|-----------|
@@ -204,12 +204,13 @@ Cenários reutilizáveis: [`tests/fixtures_dados.py`](../tests/fixtures_dados.py
 | `TestGeneticAlgorithm` | AG, VRP, depósito, crossover, fitness |
 | `TestAgRunner` | Execução do AG reutilizável |
 | `TestGroqUtils` / `TestGroqConteudo` | Fallback Groq, parsing, contexto IA |
-| `TestGroqRespostasLocais` | Chat local: instruções, motorista, carga, kits, follow-up |
+| `TestGroqGuiaMotoristas` | Guia da aba Instruções (montagem local) |
+| `TestGroqChat` | Chat do painel — sempre via Groq |
 | `TestDashboardMapa` / `TestDashboardAnalise` | Mapa e bloco de métricas |
 | `TestMetricasBenchmark` | Heurísticas, omissão do ótimo, economia relativa |
 | `TestRegressaoBugsUsuario` | Bugs de demo real (18 entregas, veículo 3) |
 
-**88 testes** no total.
+**85 testes** no total.
 
 ---
 
@@ -239,15 +240,15 @@ Cenários reutilizáveis: [`tests/fixtures_dados.py`](../tests/fixtures_dados.py
 
 | Pergunta | Onde olhar |
 |----------|------------|
-| Como mudar cidades/veículos? | Janela ao rodar `python tsp.py` ou `config.py` |
+| Como mudar cidades/veículos? | Janela ao rodar `python src/tsp.py` ou `config.py` |
 | Onde estão os nomes hospitalares? | `dados_hospitalares.py` |
-| Como rodar comparativo? | `python benchmark_comparativo.py` |
-| Como rodar experimentos? | `python experimentos_ag.py` |
+| Como rodar comparativo? | `python src/genetic_algorithm_tsp/benchmark_comparativo.py` |
+| Como rodar experimentos? | `python src/genetic_algorithm_tsp/experimentos_ag.py` |
 | Evidências para relatório? | `docs/EVIDENCIAS_EXPERIMENTAIS.md` |
 | Onde está a IA? | `groq_*.py` + `docs/CONTEXTO_IA.md` (prompts) |
 | Documentação da equipe? | `VISAO_GERAL_SISTEMA.md`, `ARQUITETURA.md`, `EVIDENCIAS_EXPERIMENTAIS.md` |
 | Guia para motoristas? | Aba **Guia Motoristas** no painel (`groq_rotas.py`) |
-| Como rodar testes? | `py -m pytest tests/test_projeto.py -v` — ver `tests/README.md` |
+| Como rodar testes? | `py -m pytest src/tests/test_projeto.py -v` — ver `src/tests/README.md` |
 
 ---
 

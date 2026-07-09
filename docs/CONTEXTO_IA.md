@@ -93,7 +93,18 @@ Para tendências da semana use o relatório semanal; para o dia use o diário.
 
 ## Regras de resposta (chat)
 
-1. Respostas **curtas e diretas** (máximo ~5 frases no chat).
+O chat recebe **todos os blocos** da execução atual:
+
+| Bloco | Conteúdo |
+|-------|----------|
+| Catálogo / tipos / coordenadas | Entregas, kits, prioridades, veículo, posição no mapa |
+| Veículos e ordem das entregas | Carga, distância, status, paradas, sequência global |
+| Remanescentes | Kits que ficaram no hospital |
+| Métricas e benchmark | AG vs aleatório, vizinho próximo, greedy, ótimo, convergência |
+| Parâmetros do AG | População, gerações, mutação, seed, capacidade |
+| Análise / relatórios / guia | Textos das abas Análise, Relatórios e Instruções (motoristas) |
+
+1. Respostas **curtas e diretas** (máximo ~5 frases no chat), salvo pedido de rota ou relatório completo.
 2. Cite **números** dos dados (carga, distância, prioridade) quando relevante.
 3. Não reorganize rotas nem sugira ordem diferente da otimizada pelo AG.
 4. Não liste todas as unidades — resuma ou cite só o que a pergunta pede.
@@ -101,20 +112,14 @@ Para tendências da semana use o relatório semanal; para o dia use o diário.
 6. Mantenha **coerência** com respostas anteriores da mesma conversa (histórico abaixo).
 7. **Kits ≠ capacidade:** demanda é em kits por unidade; capacidade é o limite do veículo (ex.: 40/80). Não confunda os dois.
 8. **Sinônimos de veículo:** aceite "veículo", "van", "carro" e formas como "v2" ou "veículo 2".
-9. **Follow-up:** perguntas como "quantas de cada?" referem-se ao veículo da pergunta anterior — use o histórico.
+9. **Follow-up:** perguntas como "quantas de cada?" ou "quantas faltaram?" referem-se ao **veículo da pergunta anterior** — use o histórico e os números `carga ATUAL/MAX` desse veículo.
+10. **Chat do painel:** todas as respostas vão pela **Groq** — interprete os dados e converse de forma natural (sem copiar blocos crus). O guia da aba Instruções continua montado localmente em `groq_rotas.py`.
 
-### Respostas locais (sem Groq)
+**Tom de voz:** profissional e humano, como um coordenador falando com a equipe — não como um relatório automático. Reformule os números em frases; evite listas e prefácios robóticos.
 
-Antes de chamar a API, `groq_respostas_locais.py` tenta responder localmente quando a pergunta é objetiva:
+### Guia Motoristas (aba Instruções — local, não é o chat)
 
-| Tema | Exemplos de pergunta |
-|------|----------------------|
-| Remanescentes | "O que ficou no hospital?" |
-| Kits / capacidade | "Como funciona kits por carga?" |
-| Carga por veículo | "Quantas cargas o veículo 2 levou?" |
-| Tipos (follow-up) | "Quantas de cada?" (após pergunta sobre um veículo) |
-| Motorista / trajetória | "Sou motorista do carro 2, qual minha trajetória?" |
-| Medicamentos | "Quais medicamentos temos entregues?" (tipos CRITICO/REGULAR/INSUMO) |
+Montado por `groq_rotas.py` / `groq_respostas_locais.py` a partir das rotas da simulação.
 
 ---
 
