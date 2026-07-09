@@ -84,6 +84,11 @@ CHAT_V2_VEICULOS = (
     "status: operacionalmente viável\n"
 )
 
+CHAT_V2_38_VEICULOS = (
+    "Veículo 2 | 3 entregas | carga 38/40 | distância 520/1500 | "
+    "status: operacionalmente viável\n"
+)
+
 CHAT_V2_ROTAS = """
 Rotas por veículo (Hospital Central → paradas → Hospital Central):
 

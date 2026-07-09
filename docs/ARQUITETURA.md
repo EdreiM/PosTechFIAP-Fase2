@@ -72,11 +72,10 @@ flowchart TB
     Conteudo --> Dashboard
 
     TSP --> Rotas
+    Rotas --> Locais
     Rotas --> Dashboard
 
     Dashboard --> Perguntas
-    Perguntas --> Locais
-    Locais --> Perguntas
     ContextoPy --> Perguntas
     Perguntas --> Groq
 
@@ -90,7 +89,7 @@ flowchart TB
     Exp --> Results
 ```
 
-**Legenda rápida:** `groq_conteudo.py` gera análise e relatórios (1 chamada Groq, 3 seções). `groq_rotas.py` monta o **Guia Motoristas** localmente. O chat tenta `groq_respostas_locais.py` antes da API.
+**Legenda rápida:** `groq_conteudo.py` gera análise e relatórios (1 chamada Groq, 3 seções). `groq_rotas.py` monta o **Guia Motoristas** localmente. O **chat** do painel usa sempre a Groq via `groq_perguntas.py`.
 
 ## Fluxo de execução
 
@@ -108,27 +107,24 @@ flowchart TB
 
 | Arquivo | Responsabilidade |
 |---------|------------------|
-| `config_ui.py` | Configuração, resumo de pedidos, viabilidade da frota |
-| `dados_hospitalares.py` | Nomes, tipos, demandas (kits), CSV, viabilidade, priorização por capacidade |
-| `exemplos/pedidos_exemplo.csv` | CSV de exemplo para importar pedidos |
-| `genetic_algorithm.py` | AG, fitness VRP, depósito, restrições |
-| `ag_runner.py` | Execução do AG reutilizável |
-| `heuristics.py` | Heurísticas clássicas de roteamento |
-| `metricas_benchmark.py` | Métricas comparativas (AG, heurísticas, ótimo) — aba Análise e `melhor_rota.txt` |
-| `benchmark_comparativo.py` | Comparativo AG vs heurísticas |
-| `experimentos_ag.py` | 3 experimentos + gráfico de convergência |
-| `tsp.py` | Orquestração principal + Pygame |
-| `dashboard_ui.py` | Painel com 7 abas; cabeçalho enxuto (só título); chat com respostas locais ou Groq |
-| `groq_conteudo.py` | Análise + relatórios em 1 chamada API (3 seções) |
-| `groq_rotas.py` | Guia Motoristas — rota passo a passo montada localmente |
-| `groq_contexto.py` | Carrega `docs/CONTEXTO_IA.md` nos prompts Groq |
+| `src/config/config.py` | Configuração central |
+| `src/ui/config_ui.py` | Configuração, resumo de pedidos, viabilidade da frota |
+| `src/genetic_algorithm_tsp/dados_hospitalares.py` | Nomes, tipos, demandas (kits), CSV, viabilidade, priorização por capacidade |
+| `src/genetic_algorithm_tsp/genetic_algorithm.py` | AG, fitness VRP, depósito, restrições |
+| `src/genetic_algorithm_tsp/ag_runner.py` | Execução do AG reutilizável |
+| `src/genetic_algorithm_tsp/benchmark_comparativo.py` | Comparativo AG vs heurísticas |
+| `src/tsp.py` | Orquestração principal + Pygame |
+| `src/ui/dashboard_ui.py` | Painel com 7 abas; cabeçalho enxuto (só título); chat sempre via Groq |
+| `src/llm/groq_conteudo.py` | Análise + relatórios em 1 chamada API (3 seções) |
+| `src/llm/groq_rotas.py` | Guia Motoristas — rota passo a passo montada localmente |
+| `src/llm/groq_contexto.py` | Carrega `docs/CONTEXTO_IA.md` nos prompts Groq |
 | `groq_utils.py` | Cliente Groq, `.env`, fallback local |
-| `groq_perguntas.py` | Chat com histórico; envia dados estruturados (não cola relatórios inteiros no prompt) |
-| `groq_respostas_locais.py` | Chat local: instruções, motorista, carga, kits, follow-up, remanescentes |
+| `groq_perguntas.py` | Chat com histórico; envia blocos completos da execução à Groq (interpretação natural) |
+| `groq_respostas_locais.py` | Guia Motoristas (aba Instruções) — montagem local das rotas |
 | `docs/CONTEXTO_IA.md` | Regras fixas da IA (arquivo operacional, não doc de leitura) |
 | `groq_*.py` | Fallbacks locais por módulo (textos enxutos) |
-| `tests/fixtures_dados.py` | Cenários reutilizáveis para testes (modo fixo + chat simulado) |
-| `tests/README.md` | Guia: modo fixo vs textos simulados |
+| `src/tests/fixtures_dados.py` | Cenários reutilizáveis para testes (modo fixo + chat simulado) |
+| `src/tests/README.md` | Guia: modo fixo vs textos simulados |
 
 ## Restrições modeladas
 
@@ -150,5 +146,5 @@ flowchart TB
 | Visualização em mapa | Pygame + aba Mapa (H = hospital) |
 | LLM instruções e relatórios | `groq_conteudo.py` (análise/relatórios) + `groq_rotas.py` (guia motoristas) |
 | Chat em linguagem natural | `groq_perguntas.py` |
-| Testes automatizados | `tests/test_projeto.py` (88) — ver `tests/README.md` |
+| Testes automatizados | `src/tests/test_projeto.py` (85) — ver `src/tests/README.md` |
 | Documentação / evidências | Este arquivo, `EVIDENCIAS_EXPERIMENTAIS.md` |

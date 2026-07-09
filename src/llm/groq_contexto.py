@@ -3,8 +3,8 @@
 from pathlib import Path
 from typing import List, Optional, Sequence, Tuple
 
-_RAIZ = Path(__file__).resolve().parent
-_CAMINHO_CONTEXTO = _RAIZ / "docs" / "CONTEXTO_IA.md"
+_RAIZ_PROJETO = Path(__file__).resolve().parents[2]
+_CAMINHO_CONTEXTO = _RAIZ_PROJETO / "docs" / "CONTEXTO_IA.md"
 
 _contexto_cache: Optional[str] = None
 

@@ -1,11 +1,22 @@
 """
 Três experimentos com configurações diferentes do Algoritmo Genético.
 
-Executar: python experimentos_ag.py
+Executar: python src/genetic_algorithm_tsp/experimentos_ag.py
 Saída: results/experimentos_ag.txt + results/experimentos_convergencia.png
 """
 
 import os
+import sys
+from pathlib import Path
+
+_SRC = Path(__file__).resolve().parents[1]
+_RAIZ_PROJETO = _SRC.parent
+for _pasta in ("config", "ui", "llm", "genetic_algorithm_tsp"):
+    _caminho = str(_SRC / _pasta)
+    if _caminho not in sys.path:
+        sys.path.insert(0, _caminho)
+if str(_SRC) not in sys.path:
+    sys.path.insert(0, str(_SRC))
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -25,7 +36,7 @@ from dados_hospitalares import configurar_cenario, resumo_tipos
 
 matplotlib.use("Agg")
 
-RESULTS_DIR = "results"
+RESULTS_DIR = str(_RAIZ_PROJETO / "results")
 
 
 def configurar_dados(cities):

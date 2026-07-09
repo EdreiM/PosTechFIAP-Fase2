@@ -5,19 +5,19 @@
 Na raiz do repositório:
 
 ```bash
-py -m pytest tests/test_projeto.py -v          # todos
-py -m pytest tests/test_projeto.py -q          # resumo
-py -m pytest tests/test_projeto.py -k chat -v  # só testes com "chat" no nome
+py -m pytest src/tests/test_projeto.py -v          # todos
+py -m pytest src/tests/test_projeto.py -q          # resumo
+py -m pytest src/tests/test_projeto.py -k chat -v  # só testes com "chat" no nome
 ```
 
 ## Arquivos
 
 | Arquivo | Função |
 |---------|--------|
-| `test_projeto.py` | Suite principal (88 testes) |
+| `test_projeto.py` | Suite principal (85 testes) |
 | `fixtures_dados.py` | Cenários reutilizáveis — **leia este arquivo primeiro** |
 | `validadores_ia.py` | Regras compartilhadas (eco de prompt, prioridade p10, etc.) |
-| `conftest.py` | Ajusta `sys.path` para importar módulos da raiz |
+| `conftest.py` | Registra subpastas de `src/` no `sys.path` para imports planos |
 
 ## Dois tipos de cenário (não confundir)
 
@@ -48,7 +48,8 @@ Constantes: `CHAT_V3_*`, `CHAT_V2_*`, `REGRESSAO_18_*`
 | `TestGeneticAlgorithm` | VRP, fitness, crossover (usa `CIDADES_AG_MINI`) |
 | `TestAgRunner` | Loop do algoritmo genético |
 | `TestGroqUtils` / `TestGroqConteudo` | API Groq desabilitada, parsing de relatórios |
-| `TestGroqRespostasLocais` | Chat local (veículo 2, 3, kits, motorista) |
+| `TestGroqGuiaMotoristas` | Guia da aba Instruções (montagem local) |
+| `TestGroqChat` | Chat do painel — sempre via Groq |
 | `TestDashboardMapa` / `TestDashboardAnalise` | Painel e bloco de métricas |
 | `TestRegressaoBugsUsuario` | Bugs encontrados em demo real (18 entregas, V3) |
 
@@ -56,6 +57,6 @@ Constantes: `CHAT_V3_*`, `CHAT_V2_*`, `REGRESSAO_18_*`
 
 | | Modo fixo | Modo aleatório |
 |---|-----------|----------------|
-| Coordenadas | `DEFAULT_PROBLEMS` em `config.py` | Sorteadas com seed |
+| Coordenadas | `src/config/config.py` (`DEFAULT_PROBLEMS`) | Sorteadas com seed |
 | Nomes/kits | Tabelas em `dados_hospitalares.py` | Sorteados com seed |
 | Demo/apresentação | Recomendado (sempre igual) | Cenário diferente a cada seed |
