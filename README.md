@@ -19,7 +19,7 @@ No **modo fixo**, demandas e prioridades por unidade são **tabelas fixas** (rep
 5. Exibe **resumo dos pedidos** antes de rodar (unidade · tipo · kits · prioridade)
 6. Simula a evolução em tempo real (Pygame)
 7. Gera **análise**, **relatórios**, **guia motoristas** e **chat**
-8. Abre painel operacional com 7 abas (mapa, veículos, análise, relatórios, guia motoristas, chat)
+8. Abre painel operacional com **7 abas**: Mapa da Rota, Veículos, Análise, Relatório Diário, Relatório Semanal, Guia Motoristas e Chat
 
 ## Arquitetura
 
@@ -114,17 +114,30 @@ Detalhes dos módulos: [docs/ARQUITETURA.md](docs/ARQUITETURA.md)
 
 ## Pré-requisitos
 
-- [Anaconda](https://www.anaconda.com/download) ou Miniconda
-- Conta Groq com API key ([console.groq.com](https://console.groq.com))
+- **Python 3.10+** (o projeto é testado em 3.13; o `environment.yml` fixa 3.9 apenas como piso do conda)
+- [Anaconda](https://www.anaconda.com/download)/Miniconda **ou** `venv` + `pip`
+- *(Opcional, recomendada)* Conta Groq com API key ([console.groq.com](https://console.groq.com)) — sem ela o sistema roda em modo local (fallback)
 
 ## Instalação
+
+**Opção A — conda:**
 
 ```bash
 conda env create --file environment.yml
 conda activate vrp_hospitalar
 ```
 
-Crie um arquivo `.env` na raiz do projeto:
+**Opção B — venv + pip:**
+
+```bash
+python -m venv .venv
+# Windows: .venv\Scripts\activate  |  Linux/macOS: source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+> Ambas as opções já instalam **pygame**, **numpy**, **matplotlib**, **groq**, **python-dotenv** e **pytest**.
+
+Crie um arquivo `.env` na raiz do projeto (use [`.env.example`](.env.example) como modelo):
 
 ```env
 GROQ_API_KEY=sua_chave_aqui
@@ -135,11 +148,11 @@ GROQ_API_KEY=sua_chave_aqui
 
 | Variável | Descrição |
 |----------|-----------|
-| `GROQ_API_KEY` | Obrigatória para IA via Groq |
+| `GROQ_API_KEY` | Necessária **apenas** para IA via Groq; sem ela o sistema usa textos locais |
 | `GROQ_MODEL` | Modelo (padrão: `llama-3.1-8b-instant`; ex.: `llama-3.3-70b-versatile`) |
 | `GROQ_DESABILITADO=1` | Pula a API e usa textos locais (demo offline) |
 
-Se a cota diária da Groq esgotar (erro 429), o sistema **não interrompe** — gera análise e relatórios localmente, monta o guia motoristas e abre o painel normalmente. Nova chave API na **mesma conta** compartilha a mesma cota.
+Se a cota diária da Groq esgotar (erro 429), a chave estiver ausente **ou o pacote `groq` não estiver instalado**, o sistema **não interrompe** — gera análise e relatórios localmente, monta o guia motoristas e abre o painel normalmente. Nova chave API na **mesma conta** compartilha a mesma cota.
 
 ## Como executar
 
@@ -168,7 +181,7 @@ Configuração → Resumo dos pedidos → Pygame (AG) → Painel + IA
 | **Autonomia por veículo** | 1200 / 1500 / 2000 km | Distância máxima por rota |
 | **Importar CSV** | opcional | Pedidos do dia — ver [`exemplos/pedidos_exemplo.csv`](exemplos/pedidos_exemplo.csv) |
 | **Cenário diferente** | checkbox | Seed aleatória a cada execução |
-| **Benchmark — solução ótima** | painel dinâmico | Aviso se ótimo (força bruta) será omitido: **≥ 7 entregas** ou **> 6 veículos** |
+| **Benchmark — solução ótima** | painel dinâmico | Aviso se o ótimo (força bruta) será omitido: **≥ 7 entregas**, **> 6 veículos** ou **veículos > entregas** |
 | **Iniciar simulação** | botão | Abre resumo dos pedidos → confirma → roda o AG |
 | **Iniciar com padrão (config.py)** | botão | Carrega valores padrão do arquivo |
 
@@ -224,6 +237,16 @@ py -m pytest src/tests/test_projeto.py -v
 Guia do que cada teste faz: [`src/tests/README.md`](src/tests/README.md)  
 Cenários reutilizáveis (modo fixo vs textos simulados): [`src/tests/fixtures_dados.py`](src/tests/fixtures_dados.py)
 
+## Solução de problemas
+
+| Sintoma | Causa provável | Correção |
+|---------|----------------|----------|
+| `ModuleNotFoundError: No module named 'groq'` (após o benchmark) | Dependências não instaladas no ambiente ativo | `pip install -r requirements.txt` (ou use o env do conda) |
+| `ModuleNotFoundError: No module named 'numpy'` / `pygame` | Interpretador errado selecionado (fora do env do projeto) | Ative o env correto (`conda activate vrp_hospitalar` ou `.venv`) |
+| `[IA] Falha na API Groq ... 429` | Cota diária da Groq esgotada | O sistema segue com textos locais; aguarde o reset (meia-noite UTC) ou use `GROQ_DESABILITADO=1` |
+| `[IA] GROQ_API_KEY não configurada` | Sem `.env` ou chave vazia | Copie `.env.example` para `.env` e preencha `GROQ_API_KEY` (ou rode em modo local) |
+| `N_CIDADES=... inválido no modo 'fixo'` | Quantidade fixa sem conjunto pré-definido | Use 5, 10, 12 ou 15 no modo fixo, ou troque para `aleatorio` |
+
 ## Estrutura do projeto
 
 ```
@@ -258,6 +281,9 @@ docs/
   CONTEXTO_IA.md                  # Regras fixas nos prompts Groq
 results/                          # Gerado localmente (gitignored)
 melhor_rota.txt                   # Gerado ao rodar src/tsp.py (gitignored)
+environment.yml                   # Ambiente conda
+requirements.txt                  # Dependências para venv/pip
+.env.example                      # Modelo de configuração (.env)
 ```
 
 ## Configuração (`src/config/config.py`)
@@ -298,24 +324,7 @@ O mesmo bloco é gravado em `melhor_rota.txt` ao final de cada simulação (`pyt
 - [Visão geral do sistema](docs/VISAO_GERAL_SISTEMA.md) — fluxo, módulos e checklist da equipe
 - [Evidências experimentais](docs/EVIDENCIAS_EXPERIMENTAIS.md) — benchmarks, relatório técnico e demo da LLM
 
-O arquivo `docs/CONTEXTO_IA.md` é carregado automaticamente nos prompts da Groq (`groq_contexto.py`); edite-o para ajustar regras da IA, não como documentação de usuário.
-
-## Relação com o Tech Challenge (PDF Fase 2)
-
-| Requisito | Status |
-|-----------|--------|
-| AG para roteamento com restrições | Implementado |
-| Depósito hospitalar | Implementado |
-| Nomes e tipos de entrega hospitalar | `dados_hospitalares.py` |
-| Unidade de carga e demandas configuráveis | kits + tabela fixa + CSV |
-| Comparativo com outras abordagens | `benchmark_comparativo.py` |
-| 3 experimentos com configs do AG | `experimentos_ag.py` |
-| Visualização em mapa | Pygame + painel |
-| LLM: instruções, relatórios, melhorias | Análise/relatórios via Groq; guia motoristas local |
-| Chat em linguagem natural | Implementado |
-| Configuração interativa + resumo de pedidos | `config_ui.py` |
-| Testes automatizados | `src/tests/test_projeto.py` (85) — ver `src/tests/README.md` |
-| Documentação e diagrama | `docs/` |
+O arquivo `docs/CONTEXTO_IA.md` é carregado automaticamente nos prompts da Groq (`groq_contexto.py`).
 
 ## Licença
 

@@ -254,7 +254,7 @@ Regras:
                 parsed[chave] = fallback[chave]
         return parsed
 
-    resposta = chamar_llm(prompt, lambda: "", temperature=0.2)
+    resposta = chamar_llm(prompt, lambda: "", temperature=0.2, max_tokens=900)
     if not resposta.strip():
         return _fallback_completo(**kwargs)
     return _processar_resposta(resposta)
