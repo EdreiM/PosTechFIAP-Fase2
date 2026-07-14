@@ -41,14 +41,9 @@ def _montar_prompt_chat(
     texto_veiculos: str,
     texto_rotas_detalhado: str,
     texto_rota_resumo: str,
-    texto_entregas_coordenadas: str,
     texto_benchmark: str,
     texto_parametros_ag: str,
-    analise: str,
-    relatorio: str,
-    relatorio_semanal: str,
     texto_resumo_semanal_projecao: str,
-    instrucoes: str,
     historico_texto: str,
 ) -> str:
     remanescentes = (
@@ -68,10 +63,6 @@ def _montar_prompt_chat(
             "ENTREGAS POR TIPO DE MEDICAMENTO/INSUMO",
             texto_entregas_por_tipo,
         ),
-        _secao_prompt(
-            "ENTREGAS NA ROTA OTIMIZADA (ordem, coordenadas, veículo)",
-            texto_entregas_coordenadas,
-        ),
         _secao_prompt("KITS REMANESCENTES NO HOSPITAL", remanescentes),
         _secao_prompt("VEÍCULOS (resumo operacional)", texto_veiculos),
         _secao_prompt(
@@ -87,16 +78,9 @@ def _montar_prompt_chat(
             "PARÂMETROS DO ALGORITMO GENÉTICO (configuração da simulação)",
             texto_parametros_ag,
         ),
-        _secao_prompt("ANÁLISE TÉCNICA GERADA PELA IA", analise),
-        _secao_prompt("RELATÓRIO OPERACIONAL DIÁRIO (IA)", relatorio),
         _secao_prompt(
             "PROJEÇÃO SEMANAL (dados numéricos — 5 dias úteis simulados)",
             texto_resumo_semanal_projecao,
-        ),
-        _secao_prompt("RELATÓRIO OPERACIONAL SEMANAL (IA)", relatorio_semanal),
-        _secao_prompt(
-            "GUIA PARA MOTORISTAS (rota passo a passo por veículo)",
-            instrucoes,
         ),
         _secao_prompt("HISTÓRICO DESTA CONVERSA", historico_texto),
         "",
@@ -150,14 +134,9 @@ def responder_pergunta(
         texto_veiculos=texto_veiculos,
         texto_rotas_detalhado=texto_rotas_detalhado,
         texto_rota_resumo=texto_rota_resumo,
-        texto_entregas_coordenadas=texto_entregas_coordenadas,
         texto_benchmark=texto_benchmark,
         texto_parametros_ag=texto_parametros_ag,
-        analise=analise,
-        relatorio=relatorio,
-        relatorio_semanal=relatorio_semanal,
         texto_resumo_semanal_projecao=texto_resumo_semanal_projecao,
-        instrucoes=instrucoes,
         historico_texto=historico_texto,
     )
 
@@ -166,4 +145,5 @@ def responder_pergunta(
         lambda: _fallback_pergunta(pergunta, historico),
         temperature=0.7,
         system=_SYSTEM_CHAT,
+        max_tokens=400,
     )

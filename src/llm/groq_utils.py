@@ -6,6 +6,11 @@ from typing import Callable, Optional
 
 from dotenv import load_dotenv
 
+try:
+    from groq import Groq
+except ImportError:  # pacote opcional — sem ele, o sistema usa textos locais
+    Groq = None
+
 _RAIZ_PROJETO = Path(__file__).resolve().parents[2]
 load_dotenv(_RAIZ_PROJETO / ".env", override=True)
 
@@ -25,22 +30,20 @@ def ia_desabilitada() -> bool:
     return os.getenv("GROQ_DESABILITADO", "").strip().lower() in ("1", "true", "sim", "yes")
 
 
-def reiniciar_cliente() -> None:
-    """Descarta cliente em cache (útil após trocar GROQ_API_KEY no .env)."""
-    global _client, _chave_carregada
-    _client = None
-    _chave_carregada = None
-
-
 def _obter_cliente():
-    global _client, _chave_carregada
+    global _client, _chave_carregada, _erro_ultima_chamada
     api_key = os.getenv("GROQ_API_KEY", "").strip()
     if not api_key:
         return None
+    if Groq is None:
+        _erro_ultima_chamada = (
+            "Pacote 'groq' não instalado. Rode: pip install groq>=0.9 "
+            "(ou defina GROQ_DESABILITADO=1 no .env)."
+        )
+        print(f"[IA] {_erro_ultima_chamada} Usando texto local.")
+        return None
     if _client is not None and _chave_carregada == api_key:
         return _client
-    from groq import Groq
-
     _client = Groq(api_key=api_key)
     _chave_carregada = api_key
     return _client
@@ -68,19 +71,27 @@ def chamar_llm(
     *,
     temperature: float = 0.2,
     system: Optional[str] = None,
+    max_tokens: Optional[int] = None,
 ) -> str:
     """Chama a Groq; em falha ou sem chave, retorna texto gerado localmente."""
     global _erro_ultima_chamada
 
     if ia_desabilitada():
+        tem_chave = bool(os.getenv("GROQ_API_KEY", "").strip())
         _erro_ultima_chamada = "IA desabilitada (GROQ_DESABILITADO)."
-        print(f"[IA] {_erro_ultima_chamada} Usando texto local.")
+        detalhe = (
+            " Há GROQ_API_KEY configurada — GROQ_DESABILITADO foi definido no"
+            " ambiente/IDE. Use GROQ_DESABILITADO=0 no .env para reativar."
+            if tem_chave else ""
+        )
+        print(f"[IA] {_erro_ultima_chamada}{detalhe} Usando texto local.")
         return fallback()
 
     cliente = _obter_cliente()
     if cliente is None:
-        _erro_ultima_chamada = "GROQ_API_KEY não configurada no .env."
-        print(f"[IA] {_erro_ultima_chamada} Usando texto local.")
+        if not os.getenv("GROQ_API_KEY", "").strip():
+            _erro_ultima_chamada = "GROQ_API_KEY não configurada no .env."
+            print(f"[IA] {_erro_ultima_chamada} Usando texto local.")
         return fallback()
 
     mensagens = []
@@ -88,12 +99,16 @@ def chamar_llm(
         mensagens.append({"role": "system", "content": system.strip()})
     mensagens.append({"role": "user", "content": prompt})
 
+    parametros = {
+        "model": MODELO_GROQ,
+        "messages": mensagens,
+        "temperature": temperature,
+    }
+    if max_tokens is not None:
+        parametros["max_tokens"] = max_tokens
+
     try:
-        resposta = cliente.chat.completions.create(
-            model=MODELO_GROQ,
-            messages=mensagens,
-            temperature=temperature,
-        )
+        resposta = cliente.chat.completions.create(**parametros)
         _erro_ultima_chamada = None
         return resposta.choices[0].message.content
     except Exception as exc:

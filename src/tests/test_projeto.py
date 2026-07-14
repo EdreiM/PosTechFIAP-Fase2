@@ -592,7 +592,7 @@ class TestGroqUtils:
     def test_historico_conversa_no_prompt(self, monkeypatch):
         prompts: list[str] = []
 
-        def _fake(prompt, fallback, *, temperature=0.2, system=None):
+        def _fake(prompt, fallback, *, temperature=0.2, system=None, max_tokens=None):
             prompts.append(prompt)
             return "O veículo 2 percorreu 865 km."
 
@@ -617,7 +617,7 @@ class TestGroqUtils:
     def test_prompt_inclui_analise_benchmark_e_guia(self, monkeypatch):
         prompts: list[str] = []
 
-        def _capturar(prompt, fallback, *, temperature=0.2, system=None):
+        def _capturar(prompt, fallback, *, temperature=0.2, system=None, max_tokens=None):
             prompts.append(prompt)
             return "ok"
 
@@ -640,12 +640,15 @@ class TestGroqUtils:
         )
         assert len(prompts) == 1
         corpo = prompts[0]
-        assert "TEXTO_ANALISE_AG" in corpo
+        # Prompt enxuto (economia de tokens): mantém dados brutos + benchmark,
+        # mas NÃO reenvia textos gerados pela própria IA (análise/relatórios/guia).
         assert "TEXTO_BENCHMARK_METRICAS" in corpo
-        assert "TEXTO_GUIA_MOTORISTAS" in corpo
-        assert "TEXTO_RELATORIO_DIA" in corpo
         assert "MÉTRICAS E BENCHMARK" in corpo
-        assert "GUIA PARA MOTORISTAS" in corpo
+        assert "População: 100" in corpo
+        assert "Projeção 5 dias" in corpo
+        assert "TEXTO_ANALISE_AG" not in corpo
+        assert "TEXTO_RELATORIO_DIA" not in corpo
+        assert "TEXTO_GUIA_MOTORISTAS" not in corpo
 
 
 class TestGroqConteudo:
@@ -732,7 +735,7 @@ class TestGroqChat:
     def test_chat_sempre_chama_groq(self, monkeypatch):
         capturado: dict = {}
 
-        def _fake_groq(prompt, fallback, *, temperature=0.2, system=None):
+        def _fake_groq(prompt, fallback, *, temperature=0.2, system=None, max_tokens=None):
             capturado["prompt"] = prompt
             capturado["temperature"] = temperature
             capturado["system"] = system
@@ -756,7 +759,7 @@ class TestGroqChat:
     def test_chat_prompt_inclui_todos_os_blocos(self, monkeypatch):
         prompts: list[str] = []
 
-        def _fake_groq(prompt, fallback, *, temperature=0.2, system=None):
+        def _fake_groq(prompt, fallback, *, temperature=0.2, system=None, max_tokens=None):
             prompts.append(prompt)
             return "ok"
 
@@ -776,9 +779,13 @@ class TestGroqChat:
             texto_parametros_ag="População: 100",
         )
         corpo = prompts[0]
-        assert "TEXTO_ANALISE" in corpo
+        # Prompt enxuto: dados brutos + benchmark presentes; textos gerados pela
+        # IA (análise/relatórios/guia) NÃO são reenviados (economia de tokens).
         assert "TEXTO_BENCHMARK" in corpo
-        assert "TEXTO_GUIA_MOTORISTAS" in corpo
+        assert "População: 100" in corpo
+        assert "Ordem paradas" in corpo
+        assert "TEXTO_ANALISE" not in corpo
+        assert "TEXTO_GUIA_MOTORISTAS" not in corpo
 
     def test_fallback_indisponivel_sem_dump_de_dados(self, monkeypatch):
         monkeypatch.setenv("GROQ_DESABILITADO", "1")
